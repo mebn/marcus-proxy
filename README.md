@@ -14,12 +14,3 @@ wails dev
 
 - [Go](https://go.dev/)
 - [Wails](https://wails.io/)
-
-### Frontend
-
-This project uses [shadcn/ui](https://ui.shadcn.com/) components. Add new components from the `frontend/` directory:
-
-```bash
-cd frontend
-npx shadcn@latest add button
-```
