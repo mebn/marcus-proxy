@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Greet } from "../wailsjs/go/main/App";
+import { Button } from "@/components/ui/button";
 
 function App() {
   const [resultText, setResultText] = useState(
@@ -16,6 +17,7 @@ function App() {
   return (
     <div id="App">
       <h1 className="text-3xl font-bold underline">Hello world!</h1>
+      <Button>Button</Button>
       <div id="result" className="result">
         {resultText}
       </div>
