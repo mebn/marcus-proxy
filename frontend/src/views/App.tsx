@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Greet } from "@/wailsjs/go/main/App";
+import { Greet } from "@/wailsjs/go/app/App";
 
 function App() {
   const [resultText, setResultText] = useState(
