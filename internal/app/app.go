@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	captureproxy "marcus-proxy/internal/proxy"
@@ -36,10 +35,6 @@ func (a *App) Shutdown(ctx context.Context) {
 	shutdownCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	_ = a.proxy.Stop(shutdownCtx)
-}
-
-func (a *App) Greet(name string) string {
-	return fmt.Sprintf("Hello %s, It's show time!", name)
 }
 
 func (a *App) StartProxy() (captureproxy.Status, error) {

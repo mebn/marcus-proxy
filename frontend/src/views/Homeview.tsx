@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Play, RefreshCw, Square } from "lucide-react";
+import { Play, RefreshCw, Square, X } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,11 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  GetProxyStatus,
-  StartProxy,
-  StopProxy,
-} from "@/wailsjs/go/app/App";
+import { GetProxyStatus, StartProxy, StopProxy } from "@/wailsjs/go/app/App";
 import { EventsOn } from "@/wailsjs/runtime/runtime";
 
 type TrafficEntry = {
@@ -30,6 +26,12 @@ type TrafficEntry = {
   error?: string;
   isConnect: boolean;
   requestBytes: number;
+  requestHeaders?: Record<string, string[]>;
+  responseHeaders?: Record<string, string[]>;
+  requestBody?: string;
+  responseBody?: string;
+  requestBodyTruncated: boolean;
+  responseBodyTruncated: boolean;
 };
 
 type ProxyStatus = {
@@ -79,9 +81,18 @@ const formatBytes = (bytes: number) => {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 };
 
+const formatHeaders = (headers?: Record<string, string[]>) => {
+  if (!headers || Object.keys(headers).length === 0) return "-";
+  return Object.entries(headers)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, values]) => `${key}: ${values.join(", ")}`)
+    .join("\n");
+};
+
 export default function Homeview() {
   const [status, setStatus] = useState<ProxyStatus>(emptyStatus);
   const [error, setError] = useState("");
+  const [selectedID, setSelectedID] = useState<number | null>(null);
 
   const proxyURL = useMemo(
     () => status.lanUrls[0] ?? status.address,
@@ -93,6 +104,10 @@ export default function Homeview() {
     [status.recent],
   );
   const tunnelCount = status.recent.length - httpTraffic.length;
+  const selectedEntry = useMemo(
+    () => status.recent.find((entry) => entry.id === selectedID) ?? null,
+    [selectedID, status.recent],
+  );
 
   async function refreshStatus() {
     const nextStatus = (await GetProxyStatus()) as ProxyStatus;
@@ -124,10 +139,10 @@ export default function Homeview() {
     const unsubscribe = EventsOn("traffic:new", (entry: TrafficEntry) => {
       setStatus((current) => ({
         ...current,
-        recent: [entry, ...(current.recent ?? []).filter((item) => item.id !== entry.id)].slice(
-          0,
-          500,
-        ),
+        recent: [
+          entry,
+          ...(current.recent ?? []).filter((item) => item.id !== entry.id),
+        ].slice(0, 500),
       }));
     });
     return unsubscribe;
@@ -138,14 +153,6 @@ export default function Homeview() {
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
         <section className="flex flex-col gap-4 border-b pb-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0">
-              <h1 className="text-2xl font-semibold tracking-normal">marcus-proxy</h1>
-              <p className="text-sm text-muted-foreground">
-                {status.running
-                  ? `Set phone HTTP proxy to ${proxyURL}`
-                  : "Proxy stopped"}
-              </p>
-            </div>
             <div className="flex shrink-0 gap-2">
               <Button
                 variant="outline"
@@ -177,27 +184,6 @@ export default function Homeview() {
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-4">
-            <div className="border p-3">
-              <div className="text-xs text-muted-foreground">Status</div>
-              <div className="text-sm font-medium">
-                {status.running ? "Running" : "Stopped"}
-              </div>
-            </div>
-            <div className="border p-3">
-              <div className="text-xs text-muted-foreground">Listen</div>
-              <div className="truncate text-sm font-medium">{status.address || "-"}</div>
-            </div>
-            <div className="border p-3">
-              <div className="text-xs text-muted-foreground">Phone URL</div>
-              <div className="truncate text-sm font-medium">{proxyURL || "-"}</div>
-            </div>
-            <div className="border p-3">
-              <div className="text-xs text-muted-foreground">Root CA</div>
-              <div className="truncate text-sm font-medium">{certURL || "-"}</div>
-            </div>
-          </div>
-
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="flex items-center gap-4 border p-3">
               <div className="flex size-36 shrink-0 items-center justify-center bg-white p-2">
@@ -209,17 +195,6 @@ export default function Homeview() {
               </div>
               <div className="min-w-0">
                 <div className="text-xs text-muted-foreground">Root CA QR</div>
-                <div className="truncate text-sm font-medium">{certURL || "-"}</div>
-              </div>
-            </div>
-            <div className="border p-3">
-              <div className="text-xs text-muted-foreground">Fingerprint</div>
-              <div className="mb-3 truncate text-sm font-medium">
-                {status.certFingerprint || "-"}
-              </div>
-              <div className="text-xs text-muted-foreground">Certificate File</div>
-              <div className="truncate text-sm font-medium">
-                {status.certPath || "-"}
               </div>
             </div>
           </div>
@@ -236,50 +211,162 @@ export default function Homeview() {
             </span>
           </div>
 
-          <div className="border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-24">Time</TableHead>
-                  <TableHead className="w-24">Method</TableHead>
-                  <TableHead>Host</TableHead>
-                  <TableHead>URL</TableHead>
-                  <TableHead className="w-24 text-right">Status</TableHead>
-                  <TableHead className="w-28 text-right">Bytes</TableHead>
-                  <TableHead className="w-28 text-right">Duration</TableHead>
-                  <TableHead className="w-32">Client</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {status.recent.length === 0 ? (
+          <div className="flex flex-col gap-3 xl:flex-row">
+            <div className="min-w-0 flex-1 border">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell
-                      colSpan={8}
-                      className="h-28 text-center text-muted-foreground"
-                    >
-                      No traffic yet
-                    </TableCell>
+                    <TableHead className="w-24">Time</TableHead>
+                    <TableHead className="w-24">Method</TableHead>
+                    <TableHead>Host</TableHead>
+                    <TableHead>URL</TableHead>
+                    <TableHead className="w-24 text-right">Status</TableHead>
+                    <TableHead className="w-28 text-right">Bytes</TableHead>
+                    <TableHead className="w-28 text-right">Duration</TableHead>
+                    <TableHead className="w-32">Client</TableHead>
                   </TableRow>
-                ) : (
-                  status.recent.map((entry) => (
-                    <TableRow key={entry.id}>
-                      <TableCell>{formatTime(entry.time)}</TableCell>
-                      <TableCell>{entry.isConnect ? "CONNECT" : entry.method}</TableCell>
-                      <TableCell className="max-w-48 truncate">{entry.host}</TableCell>
-                      <TableCell className="max-w-96 truncate">
-                        {entry.error || entry.url}
+                </TableHeader>
+                <TableBody>
+                  {status.recent.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={8}
+                        className="h-28 text-center text-muted-foreground"
+                      >
+                        No traffic yet
                       </TableCell>
-                      <TableCell className="text-right">{entry.status || "-"}</TableCell>
-                      <TableCell className="text-right">
-                        {formatBytes(entry.bytes)}
-                      </TableCell>
-                      <TableCell className="text-right">{entry.durationMs} ms</TableCell>
-                      <TableCell>{entry.client}</TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                  ) : (
+                    status.recent.map((entry) => (
+                      <TableRow
+                        key={entry.id}
+                        className="cursor-pointer"
+                        data-state={
+                          selectedID === entry.id ? "selected" : undefined
+                        }
+                        onClick={() => setSelectedID(entry.id)}
+                      >
+                        <TableCell>{formatTime(entry.time)}</TableCell>
+                        <TableCell>
+                          {entry.isConnect ? "CONNECT" : entry.method}
+                        </TableCell>
+                        <TableCell className="max-w-48 truncate">
+                          {entry.host}
+                        </TableCell>
+                        <TableCell className="max-w-96 truncate">
+                          {entry.error || entry.url}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {entry.status || "-"}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {formatBytes(entry.bytes)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {entry.durationMs} ms
+                        </TableCell>
+                        <TableCell>{entry.client}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+
+            {selectedEntry ? (
+              <aside className="flex max-h-[70vh] w-full flex-col gap-4 overflow-auto border p-4 xl:w-96">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold">
+                      {selectedEntry.isConnect
+                        ? "CONNECT"
+                        : selectedEntry.method}{" "}
+                      {selectedEntry.status || "-"}
+                    </div>
+                    <div className="truncate text-xs text-muted-foreground">
+                      {selectedEntry.url}
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setSelectedID(null)}
+                    aria-label="Close request details"
+                  >
+                    <X className="size-4" />
+                  </Button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="border p-2">
+                    <div className="text-xs text-muted-foreground">Host</div>
+                    <div className="truncate">{selectedEntry.host || "-"}</div>
+                  </div>
+                  <div className="border p-2">
+                    <div className="text-xs text-muted-foreground">Client</div>
+                    <div className="truncate">
+                      {selectedEntry.client || "-"}
+                    </div>
+                  </div>
+                  <div className="border p-2">
+                    <div className="text-xs text-muted-foreground">
+                      Response
+                    </div>
+                    <div>{formatBytes(selectedEntry.bytes)}</div>
+                  </div>
+                  <div className="border p-2">
+                    <div className="text-xs text-muted-foreground">
+                      Duration
+                    </div>
+                    <div>{selectedEntry.durationMs} ms</div>
+                  </div>
+                </div>
+
+                {selectedEntry.error ? (
+                  <div>
+                    <div className="mb-1 text-xs text-muted-foreground">
+                      Error
+                    </div>
+                    <pre className="max-h-32 overflow-auto border p-2 text-xs whitespace-pre-wrap">
+                      {selectedEntry.error}
+                    </pre>
+                  </div>
+                ) : null}
+
+                <div>
+                  <div className="mb-1 text-xs text-muted-foreground">
+                    Request Headers
+                  </div>
+                  <pre className="max-h-40 overflow-auto border p-2 text-xs whitespace-pre-wrap">
+                    {formatHeaders(selectedEntry.requestHeaders)}
+                  </pre>
+                </div>
+                <div>
+                  <div className="mb-1 text-xs text-muted-foreground">
+                    Request Body
+                  </div>
+                  <pre className="max-h-52 overflow-auto border p-2 text-xs whitespace-pre-wrap">
+                    {selectedEntry.requestBody || "-"}
+                  </pre>
+                </div>
+                <div>
+                  <div className="mb-1 text-xs text-muted-foreground">
+                    Response Headers
+                  </div>
+                  <pre className="max-h-40 overflow-auto border p-2 text-xs whitespace-pre-wrap">
+                    {formatHeaders(selectedEntry.responseHeaders)}
+                  </pre>
+                </div>
+                <div>
+                  <div className="mb-1 text-xs text-muted-foreground">
+                    Response Body
+                  </div>
+                  <pre className="max-h-52 overflow-auto border p-2 text-xs whitespace-pre-wrap">
+                    {selectedEntry.responseBody || "-"}
+                  </pre>
+                </div>
+              </aside>
+            ) : null}
           </div>
         </section>
       </div>

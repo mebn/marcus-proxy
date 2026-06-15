@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -16,20 +17,27 @@ import (
 )
 
 const DefaultAddress = "0.0.0.0:8888"
+const maxBodyPreviewBytes = 64 * 1024
 
 type TrafficEntry struct {
-	ID           int64  `json:"id"`
-	Time         string `json:"time"`
-	Method       string `json:"method"`
-	URL          string `json:"url"`
-	Host         string `json:"host"`
-	Status       int    `json:"status"`
-	Bytes        int64  `json:"bytes"`
-	DurationMs   int64  `json:"durationMs"`
-	Client       string `json:"client"`
-	Error        string `json:"error,omitempty"`
-	IsConnect    bool   `json:"isConnect"`
-	RequestBytes int64  `json:"requestBytes"`
+	ID                    int64               `json:"id"`
+	Time                  string              `json:"time"`
+	Method                string              `json:"method"`
+	URL                   string              `json:"url"`
+	Host                  string              `json:"host"`
+	Status                int                 `json:"status"`
+	Bytes                 int64               `json:"bytes"`
+	DurationMs            int64               `json:"durationMs"`
+	Client                string              `json:"client"`
+	Error                 string              `json:"error,omitempty"`
+	IsConnect             bool                `json:"isConnect"`
+	RequestBytes          int64               `json:"requestBytes"`
+	RequestHeaders        map[string][]string `json:"requestHeaders,omitempty"`
+	ResponseHeaders       map[string][]string `json:"responseHeaders,omitempty"`
+	RequestBody           string              `json:"requestBody,omitempty"`
+	ResponseBody          string              `json:"responseBody,omitempty"`
+	RequestBodyTruncated  bool                `json:"requestBodyTruncated"`
+	ResponseBodyTruncated bool                `json:"responseBodyTruncated"`
 }
 
 type Status struct {
@@ -165,23 +173,35 @@ func (s *Server) handleHTTP(rw http.ResponseWriter, req *http.Request, start tim
 	removeHopHeaders(outReq.Header)
 	outReq.Header.Del("Proxy-Connection")
 
+	requestBody, requestBodyTruncated, err := captureRequestBody(outReq)
+	if err != nil {
+		http.Error(rw, err.Error(), http.StatusBadRequest)
+		s.recordHTTPExchange(outReq, target.String(), http.StatusBadRequest, 0, start, req.RemoteAddr, err, requestBody, requestBodyTruncated, "", false, nil)
+		return
+	}
+
 	resp, err := s.client.Do(outReq)
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusBadGateway)
-		s.recordFromRequest(req, target.String(), http.StatusBadGateway, 0, start, err, false)
+		s.recordHTTPExchange(outReq, target.String(), http.StatusBadGateway, 0, start, req.RemoteAddr, err, requestBody, requestBodyTruncated, "", false, nil)
 		return
 	}
 	defer resp.Body.Close()
 
 	removeHopHeaders(resp.Header)
+	responseHeaders := cloneHeader(resp.Header)
+	responseBodyBytes, readErr := io.ReadAll(resp.Body)
+	responseBody, responseBodyTruncated := bodyPreview(responseBodyBytes)
+	if readErr != nil {
+		err = readErr
+	}
 	copyHeader(rw.Header(), resp.Header)
 	rw.WriteHeader(resp.StatusCode)
-	bytes, copyErr := io.Copy(rw, resp.Body)
-	if copyErr != nil {
-		err = copyErr
+	if _, writeErr := rw.Write(responseBodyBytes); writeErr != nil {
+		err = writeErr
 	}
 
-	s.recordFromRequest(req, target.String(), resp.StatusCode, bytes, start, err, false)
+	s.recordHTTPExchange(outReq, target.String(), resp.StatusCode, int64(len(responseBodyBytes)), start, req.RemoteAddr, err, requestBody, requestBodyTruncated, responseBody, responseBodyTruncated, responseHeaders)
 }
 
 func (s *Server) handleConnect(rw http.ResponseWriter, req *http.Request, start time.Time) {
@@ -293,39 +313,58 @@ func (s *Server) handleTLSHTTP(conn net.Conn, connectHost string, remoteAddr str
 		removeHopHeaders(req.Header)
 		req.Header.Del("Proxy-Connection")
 
+		requestBody, requestBodyTruncated, err := captureRequestBody(req)
+		if err != nil {
+			_ = writeErrorResponse(conn, http.StatusBadRequest, err.Error())
+			s.recordHTTPExchange(req, targetURL.String(), http.StatusBadRequest, 0, start, remoteAddr, err, requestBody, requestBodyTruncated, "", false, nil)
+			continue
+		}
+
 		resp, err := s.client.Do(req)
 		if err != nil {
 			_ = writeErrorResponse(conn, http.StatusBadGateway, err.Error())
-			s.recordTLSRequest(req, targetURL.String(), http.StatusBadGateway, 0, start, remoteAddr, err)
+			s.recordHTTPExchange(req, targetURL.String(), http.StatusBadGateway, 0, start, remoteAddr, err, requestBody, requestBodyTruncated, "", false, nil)
 			continue
 		}
 
 		removeHopHeaders(resp.Header)
-		counter := &countingReadCloser{ReadCloser: resp.Body}
-		resp.Body = counter
-		writeErr := resp.Write(conn)
+		responseHeaders := cloneHeader(resp.Header)
+		responseBodyBytes, readErr := io.ReadAll(resp.Body)
+		responseBody, responseBodyTruncated := bodyPreview(responseBodyBytes)
 		resp.Body.Close()
+		if readErr != nil {
+			err = readErr
+		}
+		resp.Body = io.NopCloser(bytes.NewReader(responseBodyBytes))
+		resp.ContentLength = int64(len(responseBodyBytes))
+		writeErr := resp.Write(conn)
 		if writeErr != nil {
 			err = writeErr
 		}
-		s.recordTLSRequest(req, targetURL.String(), resp.StatusCode, counter.n, start, remoteAddr, err)
+		s.recordHTTPExchange(req, targetURL.String(), resp.StatusCode, int64(len(responseBodyBytes)), start, remoteAddr, err, requestBody, requestBodyTruncated, responseBody, responseBodyTruncated, responseHeaders)
 		if err != nil {
 			return
 		}
 	}
 }
 
-func (s *Server) recordTLSRequest(req *http.Request, rawURL string, status int, bytes int64, start time.Time, remoteAddr string, err error) {
+func (s *Server) recordHTTPExchange(req *http.Request, rawURL string, status int, bytes int64, start time.Time, remoteAddr string, err error, requestBody string, requestBodyTruncated bool, responseBody string, responseBodyTruncated bool, responseHeaders map[string][]string) {
 	entry := TrafficEntry{
-		Time:         time.Now().Format(time.RFC3339),
-		Method:       req.Method,
-		URL:          rawURL,
-		Host:         req.Host,
-		Status:       status,
-		Bytes:        bytes,
-		DurationMs:   time.Since(start).Milliseconds(),
-		Client:       strings.Split(remoteAddr, ":")[0],
-		RequestBytes: req.ContentLength,
+		Time:                  time.Now().Format(time.RFC3339),
+		Method:                req.Method,
+		URL:                   rawURL,
+		Host:                  req.Host,
+		Status:                status,
+		Bytes:                 bytes,
+		DurationMs:            time.Since(start).Milliseconds(),
+		Client:                strings.Split(remoteAddr, ":")[0],
+		RequestBytes:          req.ContentLength,
+		RequestHeaders:        cloneHeader(req.Header),
+		ResponseHeaders:       responseHeaders,
+		RequestBody:           requestBody,
+		ResponseBody:          responseBody,
+		RequestBodyTruncated:  requestBodyTruncated,
+		ResponseBodyTruncated: responseBodyTruncated,
 	}
 	if err != nil {
 		entry.Error = err.Error()
@@ -421,17 +460,6 @@ func copyHeader(dst http.Header, src http.Header) {
 	}
 }
 
-type countingReadCloser struct {
-	io.ReadCloser
-	n int64
-}
-
-func (c *countingReadCloser) Read(p []byte) (int, error) {
-	n, err := c.ReadCloser.Read(p)
-	c.n += int64(n)
-	return n, err
-}
-
 func writeErrorResponse(w io.Writer, status int, message string) error {
 	resp := &http.Response{
 		StatusCode:    status,
@@ -445,6 +473,51 @@ func writeErrorResponse(w io.Writer, status int, message string) error {
 	}
 	resp.Header.Set("Content-Type", "text/plain; charset=utf-8")
 	return resp.Write(w)
+}
+
+func captureRequestBody(req *http.Request) (string, bool, error) {
+	if req.Body == nil || req.Body == http.NoBody {
+		return "", false, nil
+	}
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		return "", false, err
+	}
+	req.Body.Close()
+	req.Body = io.NopCloser(bytes.NewReader(body))
+	req.ContentLength = int64(len(body))
+	req.GetBody = func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(body)), nil
+	}
+	preview, truncated := bodyPreview(body)
+	return preview, truncated, nil
+}
+
+func bodyPreview(body []byte) (string, bool) {
+	truncated := len(body) > maxBodyPreviewBytes
+	if truncated {
+		body = body[:maxBodyPreviewBytes]
+	}
+	if len(body) == 0 {
+		return "", false
+	}
+	text := string(body)
+	text = strings.ToValidUTF8(text, "\uFFFD")
+	if truncated {
+		text += "\n\n[truncated]"
+	}
+	return text, truncated
+}
+
+func cloneHeader(header http.Header) map[string][]string {
+	if len(header) == 0 {
+		return nil
+	}
+	clone := make(map[string][]string, len(header))
+	for key, values := range header {
+		clone[key] = append([]string(nil), values...)
+	}
+	return clone
 }
 
 func removeHopHeaders(header http.Header) {
