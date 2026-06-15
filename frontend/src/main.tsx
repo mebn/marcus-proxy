@@ -5,6 +5,8 @@ import Homeview from "@/src/views/Homeview";
 
 const container = document.getElementById("root");
 
+document.documentElement.classList.add("dark");
+
 const root = createRoot(container!);
 
 root.render(

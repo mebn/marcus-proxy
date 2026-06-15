@@ -6,6 +6,7 @@ import (
 
 	captureproxy "marcus-proxy/internal/proxy"
 
+	"github.com/wailsapp/wails/v2/pkg/menu"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -16,6 +17,22 @@ type App struct {
 
 func NewApp() *App {
 	return &App{}
+}
+
+func (a *App) Menu() *menu.Menu {
+	viewMenu := menu.NewMenu()
+	viewMenu.AddCheckbox("Dark Mode", true, nil, func(data *menu.CallbackData) {
+		if a.ctx != nil {
+			runtime.EventsEmit(a.ctx, "theme:dark-mode", data.MenuItem.Checked)
+		}
+	})
+
+	return menu.NewMenuFromItems(
+		menu.AppMenu(),
+		menu.EditMenu(),
+		menu.SubMenu("View", viewMenu),
+		menu.WindowMenu(),
+	)
 }
 
 func (a *App) Startup(ctx context.Context) {
