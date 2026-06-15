@@ -1,6 +1,8 @@
 # Marcus Proxy
 
-A forward HTTP/HTTPS proxy written in Go for capturing and inspecting mobile app API traffic.
+A forward proxy written in Go for capturing and inspecting mobile app API traffic.
+
+<img src="build/appicon.png" width="100">
 
 ## Development
 
