@@ -142,6 +142,20 @@ func (s *Server) Status() Status {
 	return s.statusLocked()
 }
 
+func (s *Server) SetTraffic(entries []TrafficEntry) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.traffic = append([]TrafficEntry(nil), entries...)
+	var maxID int64
+	for _, entry := range entries {
+		if entry.ID > maxID {
+			maxID = entry.ID
+		}
+	}
+	s.nextID = maxID
+}
+
 func (s *Server) RegenerateAuthority() (Status, error) {
 	authority, err := RegenerateAuthority()
 	if err != nil {

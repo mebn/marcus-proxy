@@ -43,7 +43,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { GetProxyStatus, StartProxy } from "@/wailsjs/go/app/App";
+import {
+  GetProxyStatus,
+  LoadAppState,
+  SaveAppState,
+  StartProxy,
+} from "@/wailsjs/go/app/App";
 import { EventsOn } from "@/wailsjs/runtime/runtime";
 
 type TrafficEntry = {
@@ -395,6 +400,7 @@ export default function Homeview() {
   const [requestProjectIDs, setRequestProjectIDs] = useState<
     Record<number, string>
   >({});
+  const [storageReady, setStorageReady] = useState(false);
   const [isDark, setIsDark] = useState(true);
   const [isCapturing, setIsCapturing] = useState(true);
   const isCapturingRef = useRef(isCapturing);
@@ -703,7 +709,55 @@ export default function Homeview() {
   }
 
   useEffect(() => {
-    void refreshStatus();
+    async function loadStoredState() {
+      try {
+        const savedState = await LoadAppState();
+        const ui = savedState.ui;
+
+        if (savedState.sessions?.length) {
+          setProjects(
+            savedState.sessions.map((session) => ({
+              id: session.id,
+              name: session.id === defaultProjectID ? defaultProject.name : session.name,
+            })),
+          );
+        }
+        setPinnedIDs(savedState.pinnedIds ?? []);
+        setRequestProjectIDs(
+          Object.fromEntries(
+            Object.entries(savedState.requestSessionIds ?? {}).map(
+              ([id, sessionID]) => [Number(id), sessionID],
+            ),
+          ),
+        );
+        if (ui) {
+          setIsDark(Boolean(ui.isDark));
+          setLeftPanelOpen(Boolean(ui.leftPanelOpen));
+          setRightPanelOpen(Boolean(ui.rightPanelOpen));
+          setDetailsOpen(Boolean(ui.detailsOpen));
+          setLeftPanelWidth(ui.leftPanelWidth || 256);
+          setRightPanelWidth(ui.rightPanelWidth || 256);
+          setDetailsHeight(ui.detailsHeight || 320);
+          setFilter(ui.filter ?? "");
+          setHostFilter(ui.hostFilter ?? null);
+          setActiveProjectID(ui.activeSessionId || defaultProjectID);
+          activeProjectIDRef.current = ui.activeSessionId || defaultProjectID;
+          if (ui.sort?.key && ui.sort?.direction) {
+            setSort({
+              key: ui.sort.key as SortKey,
+              direction: ui.sort.direction as SortDirection,
+            });
+          }
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setStorageReady(true);
+        void refreshStatus();
+      }
+    }
+
+    void loadStoredState();
     const unsubscribe = EventsOn("traffic:new", (entry: TrafficEntry) => {
       if (!isCapturingRef.current) return;
 
@@ -729,6 +783,54 @@ export default function Homeview() {
   useEffect(() => {
     activeProjectIDRef.current = activeProjectID;
   }, [activeProjectID]);
+
+  useEffect(() => {
+    if (!storageReady) return;
+
+    const timeout = window.setTimeout(() => {
+      void SaveAppState({
+        ui: {
+          isDark,
+          leftPanelOpen,
+          rightPanelOpen,
+          detailsOpen,
+          leftPanelWidth,
+          rightPanelWidth,
+          detailsHeight,
+          filter,
+          hostFilter: hostFilter ?? undefined,
+          activeSessionId: activeProjectID,
+          sort,
+        },
+        sessions: projects,
+        pinnedIds: pinnedIDs,
+        requestSessionIds: Object.fromEntries(
+          Object.entries(requestProjectIDs).map(([id, sessionID]) => [
+            String(id),
+            sessionID,
+          ]),
+        ),
+      } as any);
+    }, 250);
+
+    return () => window.clearTimeout(timeout);
+  }, [
+    activeProjectID,
+    detailsHeight,
+    detailsOpen,
+    filter,
+    hostFilter,
+    isDark,
+    leftPanelOpen,
+    leftPanelWidth,
+    pinnedIDs,
+    projects,
+    requestProjectIDs,
+    rightPanelOpen,
+    rightPanelWidth,
+    sort,
+    storageReady,
+  ]);
 
   useEffect(() => {
     return EventsOn("theme:dark-mode", (enabled: boolean) => {

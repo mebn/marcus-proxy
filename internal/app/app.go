@@ -5,6 +5,7 @@ import (
 	"time"
 
 	captureproxy "marcus-proxy/internal/proxy"
+	"marcus-proxy/internal/storage"
 
 	"github.com/wailsapp/wails/v2/pkg/menu"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -13,6 +14,7 @@ import (
 type App struct {
 	ctx   context.Context
 	proxy *captureproxy.Server
+	store *storage.Store
 }
 
 func NewApp() *App {
@@ -43,11 +45,16 @@ func (a *App) Menu() *menu.Menu {
 
 func (a *App) Startup(ctx context.Context) {
 	a.ctx = ctx
-	a.proxy = captureproxy.NewServer(func(entry captureproxy.TrafficEntry) {
-		if a.ctx != nil {
-			runtime.EventsEmit(a.ctx, "traffic:new", entry)
+	store, err := storage.Open()
+	if err == nil {
+		a.store = store
+	}
+	a.proxy = a.newProxy()
+	if a.store != nil {
+		if entries, err := a.store.LoadTrafficEntries(); err == nil {
+			a.proxy.SetTraffic(entries)
 		}
-	})
+	}
 	_, _ = a.proxy.Start(captureproxy.DefaultAddress)
 }
 
@@ -62,7 +69,7 @@ func (a *App) Shutdown(ctx context.Context) {
 
 func (a *App) StartProxy() (captureproxy.Status, error) {
 	if a.proxy == nil {
-		a.proxy = captureproxy.NewServer(nil)
+		a.proxy = a.newProxy()
 	}
 	return a.proxy.Start(captureproxy.DefaultAddress)
 }
@@ -83,13 +90,31 @@ func (a *App) GetProxyStatus() captureproxy.Status {
 	return a.proxy.Status()
 }
 
+func (a *App) LoadAppState() (storage.AppState, error) {
+	if a.store == nil {
+		store, err := storage.Open()
+		if err != nil {
+			return storage.AppState{}, err
+		}
+		a.store = store
+	}
+	return a.store.LoadAppState()
+}
+
+func (a *App) SaveAppState(state storage.AppState) error {
+	if a.store == nil {
+		store, err := storage.Open()
+		if err != nil {
+			return err
+		}
+		a.store = store
+	}
+	return a.store.SaveAppState(state)
+}
+
 func (a *App) GenerateNewCertificate() (captureproxy.Status, error) {
 	if a.proxy == nil {
-		a.proxy = captureproxy.NewServer(func(entry captureproxy.TrafficEntry) {
-			if a.ctx != nil {
-				runtime.EventsEmit(a.ctx, "traffic:new", entry)
-			}
-		})
+		a.proxy = a.newProxy()
 	}
 
 	status, err := a.proxy.RegenerateAuthority()
@@ -103,4 +128,17 @@ func (a *App) GenerateNewCertificate() (captureproxy.Status, error) {
 		runtime.EventsEmit(a.ctx, "certificate:regenerated", status)
 	}
 	return status, nil
+}
+
+func (a *App) newProxy() *captureproxy.Server {
+	return captureproxy.NewServer(func(entry captureproxy.TrafficEntry) {
+		if a.store != nil {
+			go func() {
+				_ = a.store.SaveTrafficEntry(entry)
+			}()
+		}
+		if a.ctx != nil {
+			runtime.EventsEmit(a.ctx, "traffic:new", entry)
+		}
+	})
 }
