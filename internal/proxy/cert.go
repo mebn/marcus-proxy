@@ -39,6 +39,14 @@ type Authority struct {
 }
 
 func LoadOrCreateAuthority() (*Authority, error) {
+	return loadAuthority(false)
+}
+
+func RegenerateAuthority() (*Authority, error) {
+	return loadAuthority(true)
+}
+
+func loadAuthority(forceCreate bool) (*Authority, error) {
 	dir, err := os.UserConfigDir()
 	if err != nil || dir == "" {
 		dir = os.TempDir()
@@ -52,7 +60,7 @@ func LoadOrCreateAuthority() (*Authority, error) {
 	keyPath := filepath.Join(dir, caKeyFile)
 	derPath := filepath.Join(dir, caDERFile)
 
-	certPEM, keyPEM, err := readOrCreateCA(certPath, keyPath, derPath)
+	certPEM, keyPEM, err := readOrCreateCA(certPath, keyPath, derPath, forceCreate)
 	if err != nil {
 		return nil, err
 	}
@@ -165,10 +173,10 @@ func (a *Authority) CertificateForHost(host string) (tls.Certificate, error) {
 	return leaf, nil
 }
 
-func readOrCreateCA(certPath, keyPath, derPath string) ([]byte, []byte, error) {
+func readOrCreateCA(certPath, keyPath, derPath string, forceCreate bool) ([]byte, []byte, error) {
 	certPEM, certErr := os.ReadFile(certPath)
 	keyPEM, keyErr := os.ReadFile(keyPath)
-	if certErr == nil && keyErr == nil {
+	if !forceCreate && certErr == nil && keyErr == nil {
 		return certPEM, keyPEM, nil
 	}
 

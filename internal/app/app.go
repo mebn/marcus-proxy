@@ -27,9 +27,15 @@ func (a *App) Menu() *menu.Menu {
 		}
 	})
 
+	certificateMenu := menu.NewMenu()
+	certificateMenu.AddText("Generate New Certificate", nil, func(_ *menu.CallbackData) {
+		_, _ = a.GenerateNewCertificate()
+	})
+
 	return menu.NewMenuFromItems(
 		menu.AppMenu(),
 		menu.EditMenu(),
+		menu.SubMenu("Certificate", certificateMenu),
 		menu.SubMenu("View", viewMenu),
 		menu.WindowMenu(),
 	)
@@ -75,4 +81,26 @@ func (a *App) GetProxyStatus() captureproxy.Status {
 		return captureproxy.Status{}
 	}
 	return a.proxy.Status()
+}
+
+func (a *App) GenerateNewCertificate() (captureproxy.Status, error) {
+	if a.proxy == nil {
+		a.proxy = captureproxy.NewServer(func(entry captureproxy.TrafficEntry) {
+			if a.ctx != nil {
+				runtime.EventsEmit(a.ctx, "traffic:new", entry)
+			}
+		})
+	}
+
+	status, err := a.proxy.RegenerateAuthority()
+	if err != nil {
+		if a.ctx != nil {
+			runtime.EventsEmit(a.ctx, "certificate:error", err.Error())
+		}
+		return captureproxy.Status{}, err
+	}
+	if a.ctx != nil {
+		runtime.EventsEmit(a.ctx, "certificate:regenerated", status)
+	}
+	return status, nil
 }

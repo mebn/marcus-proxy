@@ -142,6 +142,19 @@ func (s *Server) Status() Status {
 	return s.statusLocked()
 }
 
+func (s *Server) RegenerateAuthority() (Status, error) {
+	authority, err := RegenerateAuthority()
+	if err != nil {
+		return Status{}, err
+	}
+
+	s.mu.Lock()
+	s.authority = authority
+	status := s.statusLocked()
+	s.mu.Unlock()
+	return status, nil
+}
+
 func (s *Server) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	start := time.Now()
 	if req.Method == http.MethodConnect {
@@ -399,9 +412,6 @@ func (s *Server) record(entry TrafficEntry) {
 		entry.Time = time.Now().Format(time.RFC3339)
 	}
 	s.traffic = append([]TrafficEntry{entry}, s.traffic...)
-	if len(s.traffic) > 500 {
-		s.traffic = s.traffic[:500]
-	}
 	recorder := s.onRecord
 	s.mu.Unlock()
 
