@@ -6,6 +6,8 @@ A forward proxy written in Go for capturing and inspecting mobile app API traffi
   <img src="images/homeview.png" width="1000">
 </p>
 
+> **_NOTE:_**  This project is in early development. Expected features may be missing, and the codebase is still being refactored.
+
 ## Development
 
 Start a development server with hot reload:
