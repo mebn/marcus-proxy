@@ -30,9 +30,7 @@ type Authority struct {
 	mu          sync.Mutex
 	cert        *x509.Certificate
 	key         *ecdsa.PrivateKey
-	certPEM     []byte
 	certDER     []byte
-	certPath    string
 	certDERPath string
 	fingerprint string
 	leafCache   map[string]tls.Certificate
@@ -87,9 +85,7 @@ func loadAuthority(forceCreate bool) (*Authority, error) {
 	return &Authority{
 		cert:        cert,
 		key:         key,
-		certPEM:     certPEM,
 		certDER:     cert.Raw,
-		certPath:    certPath,
 		certDERPath: derPath,
 		fingerprint: strings.ToUpper(hex.EncodeToString(sum[:])),
 		leafCache:   make(map[string]tls.Certificate),
@@ -102,10 +98,6 @@ func (a *Authority) RootDER() []byte {
 
 func (a *Authority) Fingerprint() string {
 	return a.fingerprint
-}
-
-func (a *Authority) CertPath() string {
-	return a.certPath
 }
 
 func (a *Authority) CertDERPath() string {
