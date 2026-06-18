@@ -33,6 +33,7 @@ export type ProxyStatus = {
 export type SortDirection = "asc" | "desc";
 
 export type SortKey =
+  | "index"
   | "time"
   | "method"
   | "contentType"
@@ -82,46 +83,66 @@ export const emptyStatus: ProxyStatus = {
   recent: [],
 };
 
-export const tableColumns: Array<{
+export type TableColumn = {
   id: string;
   label: string;
   sortKey?: SortKey;
-  className?: string;
+  width: number;
+  minWidth?: number;
   align?: "left" | "right";
-}> = [
-  { id: "index", label: "#", className: "w-10", align: "right" },
-  { id: "time", label: "Time", sortKey: "time", className: "w-28" },
-  { id: "method", label: "Method", sortKey: "method", className: "w-24" },
+};
+
+export const tableColumns: TableColumn[] = [
+  {
+    id: "index",
+    label: "#",
+    sortKey: "index",
+    width: 44,
+    minWidth: 36,
+    align: "right",
+  },
+  { id: "time", label: "Time", sortKey: "time", width: 112, minWidth: 88 },
+  { id: "method", label: "Method", sortKey: "method", width: 96, minWidth: 76 },
   {
     id: "contentType",
     label: "Type",
     sortKey: "contentType",
-    className: "w-24",
+    width: 112,
+    minWidth: 80,
   },
-  { id: "host", label: "Host", sortKey: "host", className: "w-48" },
-  { id: "url", label: "URL", sortKey: "url" },
+  { id: "host", label: "Host", sortKey: "host", width: 192, minWidth: 120 },
+  { id: "url", label: "URL", sortKey: "url", width: 360, minWidth: 160 },
   {
     id: "status",
     label: "Status",
     sortKey: "status",
-    className: "w-20",
+    width: 80,
+    minWidth: 68,
     align: "right",
   },
   {
     id: "bytes",
     label: "Bytes",
     sortKey: "bytes",
-    className: "w-24",
+    width: 96,
+    minWidth: 72,
     align: "right",
   },
   {
     id: "durationMs",
     label: "Duration",
     sortKey: "durationMs",
-    className: "w-24",
+    width: 104,
+    minWidth: 84,
     align: "right",
   },
-  { id: "client", label: "Client", sortKey: "client", className: "w-28" },
+  {
+    id: "client",
+    label: "Client",
+    sortKey: "client",
+    width: 112,
+    minWidth: 80,
+  },
 ];
 
 export const methodPillClassNames = [
@@ -208,6 +229,7 @@ export const getPrimaryContentType = (entry: TrafficEntry) =>
   getContentTypes(entry)[0] ?? "-";
 
 export const getSortValue = (entry: TrafficEntry, key: SortKey) => {
+  if (key === "index") return new Date(entry.time).getTime();
   if (key === "time") return new Date(entry.time).getTime();
   if (key === "method") return getMethodType(entry);
   if (key === "contentType") return getPrimaryContentType(entry);
