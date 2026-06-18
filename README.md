@@ -26,7 +26,7 @@ Current features:
 * Group requests by host
 * View request details in the bottom panel (`Cmd/Ctrl+B`) or right panel (`Cmd/Ctrl+R`)
 * Open the left panel (`Cmd/Ctrl+L`) to browse pinned requests and host groups
-* light mode (use at your own risk)
+* Light mode (use at your own risk)
 
 ## Development
 
