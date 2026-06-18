@@ -28,6 +28,11 @@ func (a *App) Menu() *menu.Menu {
 			runtime.EventsEmit(a.ctx, "theme:dark-mode", data.MenuItem.Checked)
 		}
 	})
+	viewMenu.AddCheckbox("Show Request Info on Right", false, nil, func(data *menu.CallbackData) {
+		if a.ctx != nil {
+			runtime.EventsEmit(a.ctx, "request-info-panel:placement", data.MenuItem.Checked)
+		}
+	})
 
 	certificateMenu := menu.NewMenu()
 	certificateMenu.AddText("Generate New Certificate", nil, func(_ *menu.CallbackData) {

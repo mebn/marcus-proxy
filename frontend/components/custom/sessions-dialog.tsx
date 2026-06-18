@@ -1,47 +1,78 @@
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { defaultProjectID, type Project } from "./proxy-data";
 
-type SessionSidebarProps = {
+type SessionPanelProps = {
   activeProjectID: string;
   newProjectName: string;
   projectCounts: Map<string, number>;
   projects: Project[];
-  width: number;
-  onClose: () => void;
   onDelete: (project: Project) => void;
   onNameChange: (value: string) => void;
-  onResizeStart: (event: React.PointerEvent<HTMLElement>) => void;
   onSave: () => void;
   onSelect: (projectID: string) => void;
 };
 
-type PanelHeaderProps = { label: string; onClose: () => void; title: string };
+type SessionsDialogProps = SessionPanelProps & {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+};
 
-export function SessionSidebar({
+export function SessionsDialog({
+  activeProjectID,
+  newProjectName,
+  open,
+  projectCounts,
+  projects,
+  onDelete,
+  onNameChange,
+  onOpenChange,
+  onSave,
+  onSelect,
+}: SessionsDialogProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="grid max-h-[min(36rem,calc(100vh-4rem))] grid-rows-[auto_minmax(0,1fr)] gap-3 sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Sessions</DialogTitle>
+        </DialogHeader>
+
+        <div className="min-h-0">
+          <SessionPanel
+            activeProjectID={activeProjectID}
+            newProjectName={newProjectName}
+            projectCounts={projectCounts}
+            projects={projects}
+            onDelete={onDelete}
+            onNameChange={onNameChange}
+            onSave={onSave}
+            onSelect={onSelect}
+          />
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function SessionPanel({
   activeProjectID,
   newProjectName,
   projectCounts,
   projects,
-  width,
-  onClose,
   onDelete,
   onNameChange,
-  onResizeStart,
   onSave,
   onSelect,
-}: SessionSidebarProps) {
+}: SessionPanelProps) {
   return (
-    <aside
-      className="relative flex min-w-0 shrink-0 flex-col border-r bg-card"
-      style={{ width }}
-    >
-      <PanelHeader
-        title="Sessions"
-        onClose={onClose}
-        label="Close left panel"
-      />
+    <div className="flex h-full min-h-0 flex-col">
       <section className="shrink-0 p-2">
         <form
           className="flex gap-1"
@@ -107,27 +138,6 @@ export function SessionSidebar({
           ))}
         </div>
       </section>
-
-      <div
-        className="absolute top-0 right-[-3px] z-20 h-full w-1.5 cursor-col-resize"
-        onPointerDown={onResizeStart}
-      />
-    </aside>
-  );
-}
-
-function PanelHeader({ label, onClose, title }: PanelHeaderProps) {
-  return (
-    <div className="flex items-center justify-between gap-2 p-3">
-      <div className="min-w-0 truncate text-sm font-semibold">{title}</div>
-      <Button
-        variant="ghost"
-        size="icon-xs"
-        onClick={onClose}
-        aria-label={label}
-      >
-        <X className="size-3" />
-      </Button>
     </div>
   );
 }

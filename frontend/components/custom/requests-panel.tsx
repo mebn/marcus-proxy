@@ -2,12 +2,13 @@ import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { HostStat, TrafficEntry } from "./proxy-data";
 
-type RequestSidebarProps = {
+type RequestsPanelProps = {
   entriesCount: number;
   hostFilter: string | null;
   hostStats: HostStat[];
   pinnedEntries: TrafficEntry[];
   selectedID: number | null;
+  side?: "left" | "right";
   width: number;
   onClose: () => void;
   onHostFilter: (host: string | null) => void;
@@ -37,11 +38,12 @@ type HostButtonProps = {
   onClick: () => void;
 };
 
-export function RequestSidebar({
+export function RequestsPanel({
   entriesCount,
   hostFilter,
   hostStats,
   pinnedEntries,
+  side = "right",
   selectedID,
   width,
   onClose,
@@ -49,13 +51,16 @@ export function RequestSidebar({
   onOpen,
   onResizeStart,
   onUnpin,
-}: RequestSidebarProps) {
+}: RequestsPanelProps) {
   return (
     <aside
-      className="relative flex min-w-0 shrink-0 flex-col border-l bg-card"
+      className={[
+        "relative flex min-w-0 shrink-0 flex-col bg-card",
+        side === "left" ? "border-r" : "border-l",
+      ].join(" ")}
       style={{ width }}
     >
-      <PanelHeader title="Requests" onClose={onClose} />
+      <PanelHeader title="Requests" side={side} onClose={onClose} />
 
       <PinnedRequests
         entries={pinnedEntries}
@@ -71,7 +76,10 @@ export function RequestSidebar({
         onHostFilter={onHostFilter}
       />
       <div
-        className="absolute top-0 left-[-3px] z-20 h-full w-1.5 cursor-col-resize"
+        className={[
+          "absolute top-0 z-20 h-full w-1.5 cursor-col-resize",
+          side === "left" ? "right-[-3px]" : "left-[-3px]",
+        ].join(" ")}
         onPointerDown={onResizeStart}
       />
     </aside>
@@ -189,9 +197,11 @@ function HostButton({ active, count, label, onClick }: HostButtonProps) {
 
 function PanelHeader({
   onClose,
+  side,
   title,
 }: {
   onClose: () => void;
+  side: "left" | "right";
   title: string;
 }) {
   return (
@@ -201,7 +211,7 @@ function PanelHeader({
         variant="ghost"
         size="icon-xs"
         onClick={onClose}
-        aria-label="Close right panel"
+        aria-label={side === "left" ? "Close left panel" : "Close right panel"}
       >
         <X className="size-3" />
       </Button>

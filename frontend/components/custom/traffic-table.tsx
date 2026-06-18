@@ -1,5 +1,7 @@
 import {
+  useEffect,
   useMemo,
+  useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
@@ -27,6 +29,9 @@ import {
   type SortState,
   type TrafficEntry,
 } from "./proxy-data";
+
+const tableRowHeight = 28;
+const overscanRows = 16;
 
 type TrafficTableProps = {
   certURL: string;
@@ -67,6 +72,9 @@ export function TrafficTable({
   onPin,
   onSort,
 }: TrafficTableProps) {
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(0);
   const [columnWidths, setColumnWidths] = useState(() =>
     Object.fromEntries(tableColumns.map((column) => [column.id, column.width])),
   );
@@ -95,6 +103,47 @@ export function TrafficTable({
       ),
     [entries],
   );
+  const virtualRows = useMemo(() => {
+    if (entries.length === 0) {
+      return {
+        rows: [],
+        startIndex: 0,
+        topHeight: 0,
+        bottomHeight: 0,
+      };
+    }
+
+    const visibleRows = Math.ceil(viewportHeight / tableRowHeight);
+    const startIndex = Math.max(
+      0,
+      Math.floor(scrollTop / tableRowHeight) - overscanRows,
+    );
+    const endIndex = Math.min(
+      entries.length,
+      startIndex + visibleRows + overscanRows * 2,
+    );
+
+    return {
+      rows: entries.slice(startIndex, endIndex),
+      startIndex,
+      topHeight: startIndex * tableRowHeight,
+      bottomHeight: (entries.length - endIndex) * tableRowHeight,
+    };
+  }, [entries, scrollTop, viewportHeight]);
+
+  useEffect(() => {
+    const element = tableContainerRef.current;
+    if (!element) return;
+
+    function updateViewportHeight() {
+      setViewportHeight(element?.clientHeight ?? 0);
+    }
+
+    updateViewportHeight();
+    const resizeObserver = new ResizeObserver(updateViewportHeight);
+    resizeObserver.observe(element);
+    return () => resizeObserver.disconnect();
+  }, []);
 
   function startColumnResize(
     column: TableColumn,
@@ -140,6 +189,8 @@ export function TrafficTable({
       <Table
         className="table-fixed text-xs"
         containerClassName="h-full overflow-auto"
+        containerRef={tableContainerRef}
+        onContainerScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
         style={{ minWidth: minTableWidth }}
       >
         <colgroup>
@@ -199,18 +250,32 @@ export function TrafficTable({
           {entries.length === 0 ? (
             <EmptyTable certURL={certURL} proxyDetails={proxyDetails} />
           ) : (
-            entries.map((entry, index) => (
-              <TrafficRow
-                entry={entry}
-                index={index}
-                key={entry.id}
-                methodClassNames={methodClassNames}
-                requestNumber={requestNumbers.get(entry.id) ?? index + 1}
-                selected={selectedID === entry.id}
-                onOpen={onOpen}
-                onPin={onPin}
-              />
-            ))
+            <>
+              {virtualRows.topHeight > 0 ? (
+                <SpacerRow height={virtualRows.topHeight} />
+              ) : null}
+
+              {virtualRows.rows.map((entry, index) => {
+                const rowIndex = virtualRows.startIndex + index;
+
+                return (
+                  <TrafficRow
+                    entry={entry}
+                    index={rowIndex}
+                    key={entry.id}
+                    methodClassNames={methodClassNames}
+                    requestNumber={requestNumbers.get(entry.id) ?? rowIndex + 1}
+                    selected={selectedID === entry.id}
+                    onOpen={onOpen}
+                    onPin={onPin}
+                  />
+                );
+              })}
+
+              {virtualRows.bottomHeight > 0 ? (
+                <SpacerRow height={virtualRows.bottomHeight} />
+              ) : null}
+            </>
           )}
         </TableBody>
       </Table>
@@ -255,7 +320,10 @@ function TrafficRow({
   const method = getMethodType(entry);
   return (
     <TableRow
-      className="cursor-pointer border-b-0 odd:bg-card even:bg-muted/30 hover:bg-muted data-[state=selected]:bg-muted"
+      className={[
+        "h-7 cursor-pointer border-b-0 hover:bg-muted data-[state=selected]:bg-muted",
+        index % 2 === 0 ? "bg-card" : "bg-muted/30",
+      ].join(" ")}
       data-state={selected ? "selected" : undefined}
       onClick={() => onOpen(entry)}
       onContextMenu={(event) => {
@@ -305,6 +373,14 @@ function TrafficRow({
       </TableCell>
 
       <TableCell className="truncate px-2 py-1">{entry.client}</TableCell>
+    </TableRow>
+  );
+}
+
+function SpacerRow({ height }: { height: number }) {
+  return (
+    <TableRow aria-hidden="true" className="border-b-0 hover:bg-transparent">
+      <TableCell colSpan={10} className="p-0" style={{ height }} />
     </TableRow>
   );
 }

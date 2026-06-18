@@ -9,6 +9,7 @@ import {
   Pause,
   Play,
   Search,
+  SquareStack,
   Smartphone,
   Trash2,
 } from "lucide-react";
@@ -21,17 +22,16 @@ import { MobileSetupDialog } from "./mobile-setup-dialog";
 import type { ProxyDetails } from "./proxy-data";
 
 type RequestToolbarProps = {
+  activeSessionName: string;
   certURL: string;
   detailsOpen: boolean;
-  isCapturing: boolean;
   leftPanelOpen: boolean;
   proxyDetails: ProxyDetails;
   rightPanelOpen: boolean;
-  onClear: () => void;
   onDetailsToggle: () => void;
   onLeftToggle: () => void;
   onRightToggle: () => void;
-  onToggleCapture: () => void;
+  onSessionsOpen: () => void;
 };
 
 type RequestFilterBarProps = {
@@ -39,11 +39,14 @@ type RequestFilterBarProps = {
   contentTypeOptions: string[];
   error: string;
   filter: string;
+  isCapturing: boolean;
   methodFilters: string[];
   methodOptions: string[];
+  onClear: () => void;
   onContentTypesChange: (values: string[]) => void;
   onFilterChange: (value: string) => void;
   onMethodsChange: (values: string[]) => void;
+  onToggleCapture: () => void;
 };
 
 type FilterGroupProps = {
@@ -54,49 +57,35 @@ type FilterGroupProps = {
 };
 
 export function RequestToolbar({
+  activeSessionName,
   certURL,
   detailsOpen,
-  isCapturing,
   leftPanelOpen,
   proxyDetails,
   rightPanelOpen,
-  onClear,
   onDetailsToggle,
   onLeftToggle,
   onRightToggle,
-  onToggleCapture,
+  onSessionsOpen,
 }: RequestToolbarProps) {
   return (
-    <div
-      className="flex h-12 shrink-0 items-center gap-3 bg-muted/60 px-3 [--wails-draggable:drag]"
-      onDoubleClick={WindowToggleMaximise}
-    >
-      <div className="w-20 shrink-0" />
+    <div className="flex h-12 shrink-0 items-center gap-3 bg-muted/60 px-3">
+      <div
+        className="flex h-full min-w-0 flex-1 items-center gap-3 [--wails-draggable:drag]"
+        onDoubleClick={WindowToggleMaximise}
+      >
+        <div className="w-20 shrink-0" />
 
-      <div className="min-w-0 truncate text-sm font-semibold">marcus-proxy</div>
+        <div className="min-w-0 truncate text-sm font-semibold">
+          marcus-proxy · Session: {activeSessionName}
+        </div>
+      </div>
 
       <div
-        className="ml-auto flex shrink-0 items-center gap-2 [--wails-draggable:no-drag]"
+        className="flex shrink-0 items-center gap-2"
         onDoubleClick={(event) => event.stopPropagation()}
+        onMouseDown={(event) => event.stopPropagation()}
       >
-        <Button
-          variant="default"
-          size="icon"
-          onClick={onToggleCapture}
-          aria-label={isCapturing ? "Pause table updates" : "Resume table updates"}
-        >
-          {isCapturing ? <Pause className="size-4" /> : <Play className="size-4" />}
-        </Button>
-
-        <Button
-          variant="destructive"
-          size="icon"
-          onClick={onClear}
-          aria-label="Clear table"
-        >
-          <Trash2 className="size-4" />
-        </Button>
-
         <MobileSetupDialog
           certURL={certURL}
           proxyDetails={proxyDetails}
@@ -104,6 +93,7 @@ export function RequestToolbar({
             <Button
               variant="outline"
               size="sm"
+              className="active:translate-y-px"
               aria-label="Open mobile setup instructions"
             >
               <Smartphone className="size-4" />
@@ -111,6 +101,16 @@ export function RequestToolbar({
             </Button>
           }
         />
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onSessionsOpen}
+          aria-label="Open sessions"
+        >
+          <SquareStack className="size-4" />
+          Sessions
+        </Button>
 
         <div className="flex items-center gap-1">
           <PanelButton
@@ -150,11 +150,14 @@ export function RequestFilterBar({
   contentTypeOptions,
   error,
   filter,
+  isCapturing,
   methodFilters,
   methodOptions,
+  onClear,
   onContentTypesChange,
   onFilterChange,
   onMethodsChange,
+  onToggleCapture,
 }: RequestFilterBarProps) {
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -181,6 +184,24 @@ export function RequestFilterBar({
       ) : null}
 
       <div className="flex shrink-0 items-center gap-2 bg-muted/30 p-2">
+        <Button
+          variant="default"
+          size="icon"
+          onClick={onToggleCapture}
+          aria-label={isCapturing ? "Pause table updates" : "Resume table updates"}
+        >
+          {isCapturing ? <Pause className="size-4" /> : <Play className="size-4" />}
+        </Button>
+
+        <Button
+          variant="destructive"
+          size="icon"
+          onClick={onClear}
+          aria-label="Clear table"
+        >
+          <Trash2 className="size-4" />
+        </Button>
+
         <div className="relative flex w-64 shrink-0 items-center">
           <Search className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" />
           <Input

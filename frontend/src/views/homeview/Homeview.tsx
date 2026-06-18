@@ -20,13 +20,13 @@ import {
   type SortState,
   type TrafficEntry,
 } from "@/components/custom/proxy-data";
-import { RequestDetails } from "@/components/custom/request-details";
-import { RequestSidebar } from "@/components/custom/request-sidebar";
+import { RequestInfoPanel } from "@/components/custom/request-info-panel";
+import { RequestsPanel } from "@/components/custom/requests-panel";
 import {
   RequestFilterBar,
   RequestToolbar,
 } from "@/components/custom/request-toolbar";
-import { SessionSidebar } from "@/components/custom/session-sidebar";
+import { SessionsDialog } from "@/components/custom/sessions-dialog";
 import { TrafficTable } from "@/components/custom/traffic-table";
 import {
   GetProxyStatus,
@@ -37,6 +37,7 @@ import {
 import { EventsOn } from "@/wailsjs/runtime/runtime";
 
 const defaultSort: SortState = { key: "time", direction: "desc" };
+type RequestInfoPanelPlacement = "bottom" | "right";
 
 export default function Homeview() {
   const [status, setStatus] = useState<ProxyStatus>(emptyStatus);
@@ -45,9 +46,11 @@ export default function Homeview() {
   const [filter, setFilter] = useState("");
   const [sort, setSort] = useState<SortState>(defaultSort);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsPlacement, setDetailsPlacement] =
+    useState<RequestInfoPanelPlacement>("bottom");
+  const [sessionsDialogOpen, setSessionsDialogOpen] = useState(false);
   const [detailsHeight, setDetailsHeight] = useState(320);
   const [leftPanelOpen, setLeftPanelOpen] = useState(false);
-  const [rightPanelOpen, setRightPanelOpen] = useState(false);
   const [leftPanelWidth, setLeftPanelWidth] = useState(256);
   const [rightPanelWidth, setRightPanelWidth] = useState(256);
   const [hostFilter, setHostFilter] = useState<string | null>(null);
@@ -144,6 +147,14 @@ export default function Homeview() {
     ],
   );
   const proxyDetails = useMemo(() => parseProxyDetails(proxyURL), [proxyURL]);
+  const activeSessionName = useMemo(
+    () =>
+      projects.find((project) => project.id === activeProjectID)?.name ??
+      "Unknown",
+    [activeProjectID, projects],
+  );
+  const bottomDetailsOpen = detailsOpen && detailsPlacement === "bottom";
+  const rightDetailsOpen = detailsOpen && detailsPlacement === "right";
 
   async function refreshStatus() {
     const nextStatus = (await GetProxyStatus()) as ProxyStatus;
@@ -261,16 +272,21 @@ export default function Homeview() {
   }
 
   function startDetailsResize(event: React.PointerEvent<HTMLElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+
     const startY = event.clientY;
     const startHeight = detailsHeight;
     const maxHeight = Math.max(220, window.innerHeight - 140);
+    const previousUserSelect = document.body.style.userSelect;
     document.body.style.userSelect = "none";
     const onPointerMove = (moveEvent: PointerEvent) => {
+      moveEvent.preventDefault();
       const nextHeight = startHeight + startY - moveEvent.clientY;
       setDetailsHeight(Math.min(maxHeight, Math.max(180, nextHeight)));
     };
     const onPointerUp = () => {
-      document.body.style.userSelect = "";
+      document.body.style.userSelect = previousUserSelect;
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
     };
@@ -282,11 +298,16 @@ export default function Homeview() {
     event: React.PointerEvent<HTMLElement>,
     side: "left" | "right",
   ) {
+    event.preventDefault();
+    event.stopPropagation();
+
     const startX = event.clientX;
     const startWidth = side === "left" ? leftPanelWidth : rightPanelWidth;
     const maxWidth = Math.max(240, Math.floor(window.innerWidth * 0.45));
+    const previousUserSelect = document.body.style.userSelect;
     document.body.style.userSelect = "none";
     const onPointerMove = (moveEvent: PointerEvent) => {
+      moveEvent.preventDefault();
       const delta =
         side === "left"
           ? moveEvent.clientX - startX
@@ -296,7 +317,7 @@ export default function Homeview() {
       if (side === "right") setRightPanelWidth(width);
     };
     const onPointerUp = () => {
-      document.body.style.userSelect = "";
+      document.body.style.userSelect = previousUserSelect;
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
     };
@@ -350,6 +371,7 @@ export default function Homeview() {
     contentTypeFilters,
     detailsHeight,
     detailsOpen,
+    detailsPlacement,
     filter,
     hostFilter,
     isDark,
@@ -359,7 +381,6 @@ export default function Homeview() {
     pinnedIDs,
     projects,
     requestProjectIDs,
-    rightPanelOpen,
     rightPanelWidth,
     sort,
     storageReady,
@@ -383,6 +404,14 @@ export default function Homeview() {
     [],
   );
 
+  useEffect(
+    () =>
+      EventsOn("request-info-panel:placement", (showOnRight: boolean) => {
+        setDetailsPlacement(showOnRight ? "right" : "bottom");
+      }),
+    [],
+  );
+
   useEffect(() => {
     document.documentElement.classList.toggle("dark", isDark);
   }, [isDark]);
@@ -393,13 +422,23 @@ export default function Homeview() {
         return;
       const key = event.key.toLowerCase();
       if (key === "l") setLeftPanelOpen((current) => !current);
-      if (key === "r") setRightPanelOpen((current) => !current);
-      if (key === "b") setDetailsOpen((current) => !current);
+      if (key === "r") {
+        setDetailsPlacement("right");
+        setDetailsOpen((current) =>
+          detailsPlacement === "right" ? !current : true,
+        );
+      }
+      if (key === "b") {
+        setDetailsPlacement("bottom");
+        setDetailsOpen((current) =>
+          detailsPlacement === "bottom" ? !current : true,
+        );
+      }
       if (["l", "r", "b"].includes(key)) event.preventDefault();
     };
     window.addEventListener("keydown", openPanelShortcut);
     return () => window.removeEventListener("keydown", openPanelShortcut);
-  }, []);
+  }, [detailsPlacement]);
 
   function applySavedState(savedState: SavedAppState) {
     const ui = savedState.ui;
@@ -415,8 +454,8 @@ export default function Homeview() {
     const activeID = ui.activeSessionId || defaultProjectID;
     setIsDark(Boolean(ui.isDark));
     setLeftPanelOpen(Boolean(ui.leftPanelOpen));
-    setRightPanelOpen(Boolean(ui.rightPanelOpen));
     setDetailsOpen(Boolean(ui.detailsOpen));
+    setDetailsPlacement(ui.detailsPlacement === "right" ? "right" : "bottom");
     setLeftPanelWidth(ui.leftPanelWidth || 256);
     setRightPanelWidth(ui.rightPanelWidth || 256);
     setDetailsHeight(ui.detailsHeight || 320);
@@ -442,8 +481,8 @@ export default function Homeview() {
       ui: {
         isDark,
         leftPanelOpen,
-        rightPanelOpen,
         detailsOpen,
+        detailsPlacement,
         leftPanelWidth,
         rightPanelWidth,
         detailsHeight,
@@ -468,33 +507,47 @@ export default function Homeview() {
   return (
     <main className="flex h-screen w-screen max-w-screen select-none flex-col overflow-hidden bg-card text-card-foreground">
       <RequestToolbar
+        activeSessionName={activeSessionName}
         certURL={certURL}
-        detailsOpen={detailsOpen}
-        isCapturing={isCapturing}
+        detailsOpen={bottomDetailsOpen}
         leftPanelOpen={leftPanelOpen}
         proxyDetails={proxyDetails}
-        rightPanelOpen={rightPanelOpen}
-        onClear={() => setClearConfirmOpen(true)}
-        onDetailsToggle={() => setDetailsOpen((current) => !current)}
+        rightPanelOpen={rightDetailsOpen}
+        onDetailsToggle={() => {
+          setDetailsPlacement("bottom");
+          setDetailsOpen((current) =>
+            detailsPlacement === "bottom" ? !current : true,
+          );
+        }}
         onLeftToggle={() => setLeftPanelOpen((current) => !current)}
-        onRightToggle={() => setRightPanelOpen((current) => !current)}
-        onToggleCapture={() => void toggleCapture()}
+        onRightToggle={() => {
+          setDetailsPlacement("right");
+          setDetailsOpen((current) =>
+            detailsPlacement === "right" ? !current : true,
+          );
+        }}
+        onSessionsOpen={() => setSessionsDialogOpen(true)}
       />
 
       <section className="flex min-h-0 w-full flex-1 bg-card">
         {leftPanelOpen ? (
-          <SessionSidebar
-            activeProjectID={activeProjectID}
-            newProjectName={newProjectName}
-            projectCounts={projectCounts}
-            projects={projects}
+          <RequestsPanel
+            entriesCount={projectEntries.length}
+            hostFilter={hostFilter}
+            hostStats={hostStats}
+            pinnedEntries={pinnedEntries}
+            selectedID={selectedID}
+            side="left"
             width={leftPanelWidth}
             onClose={() => setLeftPanelOpen(false)}
-            onDelete={setDeleteProject}
-            onNameChange={setNewProjectName}
+            onHostFilter={setHostFilter}
+            onOpen={openEntry}
             onResizeStart={(event) => startSidePanelResize(event, "left")}
-            onSave={saveNoProjectSession}
-            onSelect={selectProject}
+            onUnpin={(id) =>
+              setPinnedIDs((current) =>
+                current.filter((entryID) => entryID !== id),
+              )
+            }
           />
         ) : null}
 
@@ -504,11 +557,14 @@ export default function Homeview() {
             contentTypeOptions={contentTypeOptions}
             error={error}
             filter={filter}
+            isCapturing={isCapturing}
             methodFilters={methodFilters}
             methodOptions={methodOptions}
+            onClear={() => setClearConfirmOpen(true)}
             onContentTypesChange={setContentTypeFilters}
             onFilterChange={setFilter}
             onMethodsChange={setMethodFilters}
+            onToggleCapture={() => void toggleCapture()}
           />
 
           <div className="flex min-h-0 flex-1 flex-col bg-card">
@@ -528,8 +584,8 @@ export default function Homeview() {
               onSort={sortBy}
             />
 
-            {detailsOpen ? (
-              <RequestDetails
+            {bottomDetailsOpen ? (
+              <RequestInfoPanel
                 entry={selectedEntry}
                 height={detailsHeight}
                 onClose={() => setDetailsOpen(false)}
@@ -539,23 +595,13 @@ export default function Homeview() {
           </div>
         </div>
 
-        {rightPanelOpen ? (
-          <RequestSidebar
-            entriesCount={projectEntries.length}
-            hostFilter={hostFilter}
-            hostStats={hostStats}
-            pinnedEntries={pinnedEntries}
-            selectedID={selectedID}
+        {rightDetailsOpen ? (
+          <RequestInfoPanel
+            entry={selectedEntry}
+            placement="right"
             width={rightPanelWidth}
-            onClose={() => setRightPanelOpen(false)}
-            onHostFilter={setHostFilter}
-            onOpen={openEntry}
+            onClose={() => setDetailsOpen(false)}
             onResizeStart={(event) => startSidePanelResize(event, "right")}
-            onUnpin={(id) =>
-              setPinnedIDs((current) =>
-                current.filter((entryID) => entryID !== id),
-              )
-            }
           />
         ) : null}
       </section>
@@ -580,6 +626,19 @@ export default function Homeview() {
           setClearConfirmOpen(false);
         }}
       />
+
+      <SessionsDialog
+        activeProjectID={activeProjectID}
+        newProjectName={newProjectName}
+        open={sessionsDialogOpen}
+        projectCounts={projectCounts}
+        projects={projects}
+        onDelete={setDeleteProject}
+        onNameChange={setNewProjectName}
+        onOpenChange={setSessionsDialogOpen}
+        onSave={saveNoProjectSession}
+        onSelect={selectProject}
+      />
     </main>
   );
 }
@@ -588,8 +647,8 @@ type SavedAppState = {
   ui?: {
     isDark?: boolean;
     leftPanelOpen?: boolean;
-    rightPanelOpen?: boolean;
     detailsOpen?: boolean;
+    detailsPlacement?: string;
     leftPanelWidth?: number;
     rightPanelWidth?: number;
     detailsHeight?: number;
