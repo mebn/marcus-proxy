@@ -1,6 +1,7 @@
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { HostStat, TrafficEntry } from "./proxy-data";
+
 type RequestSidebarProps = {
   entriesCount: number;
   hostFilter: string | null;
@@ -14,24 +15,28 @@ type RequestSidebarProps = {
   onResizeStart: (event: React.PointerEvent<HTMLElement>) => void;
   onUnpin: (id: number) => void;
 };
+
 type PinnedRequestsProps = {
   entries: TrafficEntry[];
   selectedID: number | null;
   onOpen: (entry: TrafficEntry) => void;
   onUnpin: (id: number) => void;
 };
+
 type HostFiltersProps = {
   count: number;
   hostFilter: string | null;
   hostStats: HostStat[];
   onHostFilter: (host: string | null) => void;
 };
+
 type HostButtonProps = {
   active: boolean;
   count: number;
   label: string;
   onClick: () => void;
 };
+
 export function RequestSidebar({
   entriesCount,
   hostFilter,
@@ -51,12 +56,14 @@ export function RequestSidebar({
       style={{ width }}
     >
       <PanelHeader title="Requests" onClose={onClose} />
+
       <PinnedRequests
         entries={pinnedEntries}
         selectedID={selectedID}
         onOpen={onOpen}
         onUnpin={onUnpin}
       />
+
       <HostFilters
         count={entriesCount}
         hostFilter={hostFilter}
@@ -70,6 +77,7 @@ export function RequestSidebar({
     </aside>
   );
 }
+
 function PinnedRequests({
   entries,
   onOpen,
@@ -81,6 +89,7 @@ function PinnedRequests({
       <div className="mb-2 shrink-0 px-2 text-xs font-medium text-muted-foreground">
         Pinned
       </div>
+
       {entries.length === 0 ? (
         <div className="px-2 pb-1 text-xs text-muted-foreground">
           No pinned requests
@@ -104,11 +113,13 @@ function PinnedRequests({
                       {entry.isConnect ? "CONNECT" : entry.method}{" "}
                       {entry.host || "(unknown)"}
                     </span>
+
                     <span className="block truncate text-xs text-muted-foreground">
                       {entry.error || entry.url}
                     </span>
                   </span>
                 </Button>
+
                 <Button
                   variant="ghost"
                   size="icon-xs"
@@ -125,6 +136,7 @@ function PinnedRequests({
     </section>
   );
 }
+
 function HostFilters({
   count,
   hostFilter,
@@ -136,6 +148,7 @@ function HostFilters({
       <div className="mb-2 shrink-0 px-2 text-xs font-medium text-muted-foreground">
         Hosts
       </div>
+
       <div className="min-h-0 flex-1 overflow-auto">
         <div className="grid gap-1 pl-1">
           <HostButton
@@ -144,6 +157,7 @@ function HostFilters({
             label="All"
             onClick={() => onHostFilter(null)}
           />
+
           {hostStats.map((item) => (
             <HostButton
               key={item.host}
@@ -158,6 +172,7 @@ function HostFilters({
     </section>
   );
 }
+
 function HostButton({ active, count, label, onClick }: HostButtonProps) {
   return (
     <Button
@@ -171,6 +186,7 @@ function HostButton({ active, count, label, onClick }: HostButtonProps) {
     </Button>
   );
 }
+
 function PanelHeader({
   onClose,
   title,

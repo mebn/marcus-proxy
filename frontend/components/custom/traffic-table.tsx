@@ -21,6 +21,7 @@ import {
   type SortState,
   type TrafficEntry,
 } from "./proxy-data";
+
 type TrafficTableProps = {
   certURL: string;
   entries: TrafficEntry[];
@@ -32,11 +33,13 @@ type TrafficTableProps = {
   onPin: (entry: TrafficEntry) => void;
   onSort: (key: SortKey) => void;
 };
+
 type SortButtonProps = {
   column: (typeof tableColumns)[number];
   onSort: (key: SortKey) => void;
   sort: SortState;
 };
+
 type TrafficRowProps = {
   entry: TrafficEntry;
   index: number;
@@ -45,6 +48,7 @@ type TrafficRowProps = {
   onPin: (entry: TrafficEntry) => void;
   selected: boolean;
 };
+
 export function TrafficTable({
   certURL,
   entries,
@@ -75,6 +79,7 @@ export function TrafficTable({
             ))}
           </TableRow>
         </TableHeader>
+
         <TableBody>
           {entries.length === 0 ? (
             <EmptyTable certURL={certURL} proxyDetails={proxyDetails} />
@@ -96,6 +101,7 @@ export function TrafficTable({
     </div>
   );
 }
+
 function SortButton({ column, onSort, sort }: SortButtonProps) {
   const active = sort.key === column.sortKey;
   return (
@@ -120,6 +126,7 @@ function SortButton({ column, onSort, sort }: SortButtonProps) {
     </Button>
   );
 }
+
 function TrafficRow({
   entry,
   index,
@@ -142,9 +149,11 @@ function TrafficRow({
       <TableCell className="px-2 py-1 text-right text-muted-foreground">
         {index + 1}
       </TableCell>
+
       <TableCell className="px-2 py-1 whitespace-nowrap">
         {formatTime(entry.time)}
       </TableCell>
+
       <TableCell className="px-2 py-1">
         <span
           className={[
@@ -155,26 +164,34 @@ function TrafficRow({
           <span className="truncate">{method}</span>
         </span>
       </TableCell>
+
       <TableCell className="truncate px-2 py-1">
         {getPrimaryContentType(entry)}
       </TableCell>
+
       <TableCell className="truncate px-2 py-1">{entry.host}</TableCell>
+
       <TableCell className="truncate px-2 py-1">
         {entry.error || entry.url}
       </TableCell>
+
       <TableCell className="truncate px-2 py-1 text-right">
         {entry.status || "-"}
       </TableCell>
+
       <TableCell className="truncate px-2 py-1 text-right">
         {formatBytes(entry.bytes)}
       </TableCell>
+
       <TableCell className="truncate px-2 py-1 text-right">
         {entry.durationMs} ms
       </TableCell>
+
       <TableCell className="truncate px-2 py-1">{entry.client}</TableCell>
     </TableRow>
   );
 }
+
 function EmptyTable({
   certURL,
   proxyDetails,
@@ -205,6 +222,7 @@ function EmptyTable({
     </TableRow>
   );
 }
+
 function headClassName(column: (typeof tableColumns)[number]) {
   return [
     "h-7 px-2",

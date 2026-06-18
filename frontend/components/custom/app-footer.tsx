@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+
 type AppFooterProps = {
   detailsOpen: boolean;
   leftPanelOpen: boolean;
@@ -16,6 +17,7 @@ type AppFooterProps = {
   onLeftToggle: () => void;
   onRightToggle: () => void;
 };
+
 type PanelButtonProps = {
   active: boolean;
   activeIcon: ReactNode;
@@ -24,6 +26,7 @@ type PanelButtonProps = {
   inactiveLabel: string;
   onClick: () => void;
 };
+
 export function AppFooter({
   detailsOpen,
   leftPanelOpen,
@@ -43,6 +46,7 @@ export function AppFooter({
           activeIcon={<PanelLeftClose className="size-4" />}
           inactiveIcon={<PanelLeftOpen className="size-4" />}
         />
+
         <PanelButton
           active={detailsOpen}
           activeLabel="Close bottom panel"
@@ -51,6 +55,7 @@ export function AppFooter({
           activeIcon={<PanelBottomClose className="size-4" />}
           inactiveIcon={<PanelBottomOpen className="size-4" />}
         />
+
         <PanelButton
           active={rightPanelOpen}
           activeLabel="Close right panel"
@@ -63,6 +68,7 @@ export function AppFooter({
     </footer>
   );
 }
+
 function PanelButton({
   active,
   activeIcon,

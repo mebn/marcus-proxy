@@ -7,17 +7,20 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { formatBytes, formatHeaders, type TrafficEntry } from "./proxy-data";
+
 type RequestDetailsProps = {
   entry: TrafficEntry | null;
   height: number;
   onClose: () => void;
   onResizeStart: (event: React.PointerEvent<HTMLElement>) => void;
 };
+
 type DetailBlockProps = {
   children: ReactNode;
   defaultOpen?: boolean;
   title: string;
 };
+
 export function RequestDetails({
   entry,
   height,
@@ -39,10 +42,12 @@ export function RequestDetails({
               ? `${entry.isConnect ? "CONNECT" : entry.method} ${entry.status || "-"}`
               : "No request selected"}
           </div>
+
           <div className="truncate text-xs text-muted-foreground">
             {entry?.url ?? "Select table row to inspect request"}
           </div>
         </div>
+
         <Button
           variant="outline"
           size="icon"
@@ -57,16 +62,19 @@ export function RequestDetails({
     </aside>
   );
 }
+
 function SelectedRequest({ entry }: { entry: TrafficEntry }) {
   return (
     <div className="grid min-h-0 flex-1 gap-4 overflow-auto p-4 xl:grid-cols-[22rem_minmax(0,1fr)]">
       <div className="grid min-w-0 content-start gap-2 text-sm">
         <InfoBox label="Host" value={entry.host || "-"} />
         <InfoBox label="Client" value={entry.client || "-"} />
+
         <div className="grid grid-cols-2 gap-2">
           <InfoBox label="Response" value={formatBytes(entry.bytes)} />
           <InfoBox label="Duration" value={`${entry.durationMs} ms`} />
         </div>
+
         {entry.error ? (
           <div>
             <div className="mb-1 text-xs text-muted-foreground">Error</div>
@@ -76,18 +84,22 @@ function SelectedRequest({ entry }: { entry: TrafficEntry }) {
           </div>
         ) : null}
       </div>
+
       <div className="grid min-w-0 content-start gap-2">
         <DetailBlock title="Request Headers" defaultOpen>
           <DetailPre>{formatHeaders(entry.requestHeaders)}</DetailPre>
         </DetailBlock>
+
         <DetailBlock title="Request Body">
           <DetailPre>
             {bodyText(entry.requestBody, entry.requestBodyTruncated)}
           </DetailPre>
         </DetailBlock>
+
         <DetailBlock title="Response Headers" defaultOpen>
           <DetailPre>{formatHeaders(entry.responseHeaders)}</DetailPre>
         </DetailBlock>
+
         <DetailBlock title="Response Body">
           <DetailPre>
             {bodyText(entry.responseBody, entry.responseBodyTruncated)}
@@ -97,6 +109,7 @@ function SelectedRequest({ entry }: { entry: TrafficEntry }) {
     </div>
   );
 }
+
 function DetailBlock({
   children,
   defaultOpen = false,
@@ -116,12 +129,14 @@ function DetailBlock({
           <ChevronDown className="size-4" />
         </Button>
       </CollapsibleTrigger>
+
       <CollapsibleContent className="min-w-0 border-t">
         {children}
       </CollapsibleContent>
     </Collapsible>
   );
 }
+
 function DetailPre({ children }: { children: ReactNode }) {
   return (
     <pre className="max-h-44 max-w-full overflow-auto p-3 text-xs whitespace-pre">
@@ -129,6 +144,7 @@ function DetailPre({ children }: { children: ReactNode }) {
     </pre>
   );
 }
+
 function EmptyDetails() {
   return (
     <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
@@ -136,6 +152,7 @@ function EmptyDetails() {
     </div>
   );
 }
+
 function InfoBox({ label, value }: { label: string; value: string }) {
   return (
     <div className="border p-2">
@@ -144,6 +161,7 @@ function InfoBox({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+
 function bodyText(value: string | undefined, truncated: boolean) {
   return `${value || "-"}${truncated ? "\n\n[truncated]" : ""}`;
 }

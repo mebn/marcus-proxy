@@ -18,6 +18,7 @@ export type TrafficEntry = {
   requestBodyTruncated: boolean;
   responseBodyTruncated: boolean;
 };
+
 export type ProxyStatus = {
   running: boolean;
   address: string;
@@ -28,7 +29,9 @@ export type ProxyStatus = {
   httpsInterceptOn: boolean;
   recent: TrafficEntry[];
 };
+
 export type SortDirection = "asc" | "desc";
+
 export type SortKey =
   | "time"
   | "method"
@@ -39,28 +42,35 @@ export type SortKey =
   | "bytes"
   | "durationMs"
   | "client";
+
 export type SortState = {
   key: SortKey;
   direction: SortDirection;
 };
+
 export type HostStat = {
   host: string;
   count: number;
 };
+
 export type Project = {
   id: string;
   name: string;
 };
+
 export type ProxyDetails = {
   host: string;
   port: string;
   url: string;
 };
+
 export const defaultProjectID = "default";
+
 export const defaultProject: Project = {
   id: defaultProjectID,
   name: "Quick session",
 };
+
 export const emptyStatus: ProxyStatus = {
   running: false,
   address: "",
@@ -71,6 +81,7 @@ export const emptyStatus: ProxyStatus = {
   httpsInterceptOn: false,
   recent: [],
 };
+
 export const tableColumns: Array<{
   id: string;
   label: string;
@@ -112,6 +123,7 @@ export const tableColumns: Array<{
   },
   { id: "client", label: "Client", sortKey: "client", className: "w-28" },
 ];
+
 export const methodPillClassNames = [
   "bg-sky-100 text-sky-800 ring-sky-200 dark:bg-sky-950 dark:text-sky-200 dark:ring-sky-800",
   "bg-emerald-100 text-emerald-800 ring-emerald-200 dark:bg-emerald-950 dark:text-emerald-200 dark:ring-emerald-800",
@@ -122,6 +134,7 @@ export const methodPillClassNames = [
   "bg-lime-100 text-lime-900 ring-lime-200 dark:bg-lime-950 dark:text-lime-200 dark:ring-lime-800",
   "bg-pink-100 text-pink-800 ring-pink-200 dark:bg-pink-950 dark:text-pink-200 dark:ring-pink-800",
 ];
+
 export const normalizeStatus = (
   value: Partial<ProxyStatus> | null,
 ): ProxyStatus => ({
@@ -134,18 +147,21 @@ export const normalizeStatus = (
   httpsInterceptOn: Boolean(value?.httpsInterceptOn),
   recent: value?.recent ?? [],
 });
+
 export const formatTime = (value: string) =>
   new Intl.DateTimeFormat(undefined, {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
   }).format(new Date(value));
+
 export const formatBytes = (bytes: number) => {
   if (bytes < 0) return "-";
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 };
+
 export const formatHeaders = (headers?: Record<string, string[]>) => {
   if (!headers || Object.keys(headers).length === 0) return "-";
   return Object.entries(headers)
@@ -153,8 +169,10 @@ export const formatHeaders = (headers?: Record<string, string[]>) => {
     .map(([key, values]) => `${key}: ${values.join(", ")}`)
     .join("\n");
 };
+
 export const getMethodType = (entry: TrafficEntry) =>
   entry.isConnect ? "CONNECT" : entry.method || "(unknown)";
+
 export const getHeaderValues = (
   headers: Record<string, string[]> | undefined,
   name: string,
@@ -165,6 +183,7 @@ export const getHeaderValues = (
     .filter(([key]) => key.toLowerCase() === target)
     .flatMap(([, values]) => values);
 };
+
 export const normalizeContentType = (value: string) => {
   const mimeType = value.split(";")[0]?.trim().toLowerCase();
   if (!mimeType) return "(unknown)";
@@ -176,6 +195,7 @@ export const normalizeContentType = (value: string) => {
   if (suffix === "xml") return base || "xml";
   return base || suffix || subtype;
 };
+
 export const getContentTypes = (entry: TrafficEntry) =>
   [
     ...getHeaderValues(entry.requestHeaders, "content-type"),
@@ -183,8 +203,10 @@ export const getContentTypes = (entry: TrafficEntry) =>
   ]
     .map(normalizeContentType)
     .filter((value, index, values) => values.indexOf(value) === index);
+
 export const getPrimaryContentType = (entry: TrafficEntry) =>
   getContentTypes(entry)[0] ?? "-";
+
 export const getSortValue = (entry: TrafficEntry, key: SortKey) => {
   if (key === "time") return new Date(entry.time).getTime();
   if (key === "method") return getMethodType(entry);
@@ -192,6 +214,7 @@ export const getSortValue = (entry: TrafficEntry, key: SortKey) => {
   if (key === "url") return entry.error || entry.url;
   return entry[key];
 };
+
 export const getSearchText = (entry: TrafficEntry) =>
   [
     getMethodType(entry),

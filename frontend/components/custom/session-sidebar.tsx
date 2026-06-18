@@ -2,6 +2,7 @@ import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { defaultProjectID, type Project } from "./proxy-data";
+
 type SessionSidebarProps = {
   activeProjectID: string;
   newProjectName: string;
@@ -15,7 +16,9 @@ type SessionSidebarProps = {
   onSave: () => void;
   onSelect: (projectID: string) => void;
 };
+
 type PanelHeaderProps = { label: string; onClose: () => void; title: string };
+
 export function SessionSidebar({
   activeProjectID,
   newProjectName,
@@ -54,6 +57,7 @@ export function SessionSidebar({
             aria-label="Session name"
             className="h-8 min-w-0"
           />
+
           <Button
             type="submit"
             variant="outline"
@@ -64,6 +68,7 @@ export function SessionSidebar({
           </Button>
         </form>
       </section>
+
       <section className="min-h-0 flex-1 overflow-auto p-2">
         <div className="grid gap-1 pr-1">
           {projects.map((project) => (
@@ -82,6 +87,7 @@ export function SessionSidebar({
                   {projectCounts.get(project.id) ?? 0}
                 </span>
               </Button>
+
               {project.id === defaultProjectID ? (
                 <div className="size-6 shrink-0" />
               ) : (
@@ -98,6 +104,7 @@ export function SessionSidebar({
           ))}
         </div>
       </section>
+
       <div
         className="absolute top-0 right-[-3px] z-20 h-full w-1.5 cursor-col-resize"
         onPointerDown={onResizeStart}
@@ -105,6 +112,7 @@ export function SessionSidebar({
     </aside>
   );
 }
+
 function PanelHeader({ label, onClose, title }: PanelHeaderProps) {
   return (
     <div className="flex items-center justify-between gap-2 border-b p-3">

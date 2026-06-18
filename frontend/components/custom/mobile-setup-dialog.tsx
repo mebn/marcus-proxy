@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -11,13 +10,16 @@ import {
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import type { ProxyDetails } from "./proxy-data";
+
 type MobileSetupDialogProps = {
   certURL: string;
   proxyDetails: ProxyDetails;
   trigger: ReactNode;
 };
+
 type SetupStepProps = { number: string; title: string; children: ReactNode };
 type LabeledValueProps = { label: string; value: string };
+
 export function MobileSetupDialog({
   certURL,
   proxyDetails,
@@ -33,6 +35,7 @@ export function MobileSetupDialog({
             Wi-Fi proxy and root certificate.
           </DialogDescription>
         </DialogHeader>
+
         <div className="grid gap-4">
           <SetupStep number="1" title="Set Wi-Fi proxy">
             <div className="text-muted-foreground">
@@ -44,7 +47,9 @@ export function MobileSetupDialog({
               <LabeledValue label="Port" value={proxyDetails.port} />
             </div>
           </SetupStep>
+
           <Separator />
+
           <SetupStep number="2" title="Install certificate">
             <div className="text-muted-foreground">
               Scan QR code or open URL on phone.
@@ -62,7 +67,9 @@ export function MobileSetupDialog({
               </div>
             </div>
           </SetupStep>
+
           <Separator />
+
           <SetupStep number="3" title="Trust certificate">
             <div className="text-muted-foreground">
               Enable full trust for certificate in settings.
@@ -79,6 +86,7 @@ function SetupStep({ number, title, children }: SetupStepProps) {
       <div className="flex size-8 items-center justify-center border text-xs">
         {number}
       </div>
+
       <div>
         <div className="font-medium">{title}</div>
         {children}
@@ -86,6 +94,7 @@ function SetupStep({ number, title, children }: SetupStepProps) {
     </div>
   );
 }
+
 function LabeledValue({ label, value }: LabeledValueProps) {
   return (
     <div>

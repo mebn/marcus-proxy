@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { MobileSetupDialog } from "./mobile-setup-dialog";
 import type { ProxyDetails } from "./proxy-data";
+
 type RequestToolbarProps = {
   certURL: string;
   contentTypeFilters: string[];
@@ -20,12 +21,14 @@ type RequestToolbarProps = {
   onMethodsChange: (values: string[]) => void;
   onToggleCapture: () => void;
 };
+
 type FilterGroupProps = {
   label: string;
   onChange: (values: string[]) => void;
   options: string[];
   value: string[];
 };
+
 export function RequestToolbar({
   certURL,
   contentTypeFilters,
@@ -60,6 +63,7 @@ export function RequestToolbar({
               <Play className="size-4" />
             )}
           </Button>
+
           <Button
             variant="outline"
             size="icon"
@@ -69,6 +73,7 @@ export function RequestToolbar({
             <Trash2 className="size-4" />
           </Button>
         </div>
+
         <div className="relative flex min-w-0 flex-1 items-center">
           <Search className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" />
           <Input
@@ -79,6 +84,7 @@ export function RequestToolbar({
             className="pl-8"
           />
         </div>
+
         <MobileSetupDialog
           certURL={certURL}
           proxyDetails={proxyDetails}
@@ -92,12 +98,14 @@ export function RequestToolbar({
             </Button>
           }
         />
+
         {error ? (
           <div className="w-full text-sm text-destructive lg:basis-full">
             {error}
           </div>
         ) : null}
       </header>
+
       <div className="shrink-0 overflow-x-auto border-b bg-muted/30 p-2">
         <div className="flex w-max items-center gap-2">
           <FilterGroup
@@ -106,6 +114,7 @@ export function RequestToolbar({
             options={methodOptions}
             onChange={onMethodsChange}
           />
+
           <div className="h-6 w-px shrink-0 bg-border" />
           <FilterGroup
             label="Filter by content type"
@@ -118,6 +127,7 @@ export function RequestToolbar({
     </>
   );
 }
+
 function FilterGroup({ label, onChange, options, value }: FilterGroupProps) {
   return (
     <ToggleGroup
