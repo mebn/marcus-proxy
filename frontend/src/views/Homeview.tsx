@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -43,6 +49,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   GetProxyStatus,
   LoadAppState,
@@ -87,6 +94,7 @@ type SortDirection = "asc" | "desc";
 type SortKey =
   | "time"
   | "method"
+  | "contentType"
   | "host"
   | "url"
   | "status"
@@ -128,24 +136,45 @@ const defaultProject: Project = {
 };
 
 const tableColumns: Array<{
-  key: SortKey;
+  id: string;
   label: string;
+  sortKey?: SortKey;
   className?: string;
   align?: "left" | "right";
 }> = [
-  { key: "time", label: "Time", className: "w-32" },
-  { key: "method", label: "Method", className: "w-24" },
-  { key: "host", label: "Host", className: "w-52" },
-  { key: "url", label: "URL" },
-  { key: "status", label: "Status", className: "w-24", align: "right" },
-  { key: "bytes", label: "Bytes", className: "w-28", align: "right" },
+  { id: "index", label: "#", className: "w-10", align: "right" },
+  { id: "time", label: "Time", sortKey: "time", className: "w-28" },
+  { id: "method", label: "Method", sortKey: "method", className: "w-24" },
   {
-    key: "durationMs",
-    label: "Duration",
-    className: "w-28",
+    id: "contentType",
+    label: "Type",
+    sortKey: "contentType",
+    className: "w-24",
+  },
+  { id: "host", label: "Host", sortKey: "host", className: "w-48" },
+  { id: "url", label: "URL", sortKey: "url" },
+  {
+    id: "status",
+    label: "Status",
+    sortKey: "status",
+    className: "w-20",
     align: "right",
   },
-  { key: "client", label: "Client", className: "w-32" },
+  {
+    id: "bytes",
+    label: "Bytes",
+    sortKey: "bytes",
+    className: "w-24",
+    align: "right",
+  },
+  {
+    id: "durationMs",
+    label: "Duration",
+    sortKey: "durationMs",
+    className: "w-24",
+    align: "right",
+  },
+  { id: "client", label: "Client", sortKey: "client", className: "w-28" },
 ];
 
 const normalizeStatus = (value: Partial<ProxyStatus> | null): ProxyStatus => ({
@@ -183,7 +212,8 @@ const formatHeaders = (headers?: Record<string, string[]>) => {
 
 const getSortValue = (entry: TrafficEntry, key: SortKey) => {
   if (key === "time") return new Date(entry.time).getTime();
-  if (key === "method") return entry.isConnect ? "CONNECT" : entry.method;
+  if (key === "method") return getMethodType(entry);
+  if (key === "contentType") return getPrimaryContentType(entry);
   if (key === "url") return entry.error || entry.url;
   return entry[key];
 };
@@ -191,6 +221,7 @@ const getSortValue = (entry: TrafficEntry, key: SortKey) => {
 const getSearchText = (entry: TrafficEntry) =>
   [
     entry.isConnect ? "CONNECT" : entry.method,
+    getContentTypes(entry).join(" "),
     entry.host,
     entry.url,
     entry.status,
@@ -202,6 +233,58 @@ const getSearchText = (entry: TrafficEntry) =>
     .filter((value) => value !== undefined && value !== null)
     .join(" ")
     .toLowerCase();
+
+const getMethodType = (entry: TrafficEntry) =>
+  entry.isConnect ? "CONNECT" : entry.method || "(unknown)";
+
+const getHeaderValues = (
+  headers: Record<string, string[]> | undefined,
+  name: string,
+) => {
+  if (!headers) return [];
+
+  const target = name.toLowerCase();
+  return Object.entries(headers)
+    .filter(([key]) => key.toLowerCase() === target)
+    .flatMap(([, values]) => values);
+};
+
+const normalizeContentType = (value: string) => {
+  const mimeType = value.split(";")[0]?.trim().toLowerCase();
+  if (!mimeType) return "(unknown)";
+
+  const subtype = mimeType.includes("/") ? mimeType.split("/").pop() : mimeType;
+  if (!subtype) return mimeType;
+
+  if (!subtype.includes("+")) return subtype;
+
+  const [base, suffix] = subtype.split("+");
+  if (suffix === "json") return "json";
+  if (suffix === "xml") return base || "xml";
+  return base || suffix || subtype;
+};
+
+const getContentTypes = (entry: TrafficEntry) =>
+  [
+    ...getHeaderValues(entry.requestHeaders, "content-type"),
+    ...getHeaderValues(entry.responseHeaders, "content-type"),
+  ]
+    .map(normalizeContentType)
+    .filter((value, index, values) => values.indexOf(value) === index);
+
+const getPrimaryContentType = (entry: TrafficEntry) =>
+  getContentTypes(entry)[0] ?? "-";
+
+const methodPillClassNames = [
+  "bg-sky-100 text-sky-800 ring-sky-200 dark:bg-sky-950 dark:text-sky-200 dark:ring-sky-800",
+  "bg-emerald-100 text-emerald-800 ring-emerald-200 dark:bg-emerald-950 dark:text-emerald-200 dark:ring-emerald-800",
+  "bg-amber-100 text-amber-900 ring-amber-200 dark:bg-amber-950 dark:text-amber-200 dark:ring-amber-800",
+  "bg-rose-100 text-rose-800 ring-rose-200 dark:bg-rose-950 dark:text-rose-200 dark:ring-rose-800",
+  "bg-violet-100 text-violet-800 ring-violet-200 dark:bg-violet-950 dark:text-violet-200 dark:ring-violet-800",
+  "bg-cyan-100 text-cyan-800 ring-cyan-200 dark:bg-cyan-950 dark:text-cyan-200 dark:ring-cyan-800",
+  "bg-lime-100 text-lime-900 ring-lime-200 dark:bg-lime-950 dark:text-lime-200 dark:ring-lime-800",
+  "bg-pink-100 text-pink-800 ring-pink-200 dark:bg-pink-950 dark:text-pink-200 dark:ring-pink-800",
+];
 
 const getScrollableParent = (target: EventTarget | null) => {
   let element = target instanceof Element ? target : null;
@@ -391,6 +474,8 @@ export default function Homeview() {
   const [leftPanelWidth, setLeftPanelWidth] = useState(256);
   const [rightPanelWidth, setRightPanelWidth] = useState(256);
   const [hostFilter, setHostFilter] = useState<string | null>(null);
+  const [methodFilters, setMethodFilters] = useState<string[]>([]);
+  const [contentTypeFilters, setContentTypeFilters] = useState<string[]>([]);
   const [pinnedIDs, setPinnedIDs] = useState<number[]>([]);
   const [projects, setProjects] = useState<Project[]>([defaultProject]);
   const [activeProjectID, setActiveProjectID] = useState(defaultProjectID);
@@ -455,11 +540,60 @@ export default function Homeview() {
       (left, right) => left.host.localeCompare(right.host),
     );
   }, [projectEntries]);
+  const methodOptions = useMemo(
+    () =>
+      Array.from(
+        new Set([
+          ...methodFilters,
+          ...projectEntries.map((entry) => getMethodType(entry)),
+        ]),
+      ).sort((left, right) => left.localeCompare(right)),
+    [methodFilters, projectEntries],
+  );
+  const methodClassNames = useMemo(
+    () =>
+      new Map(
+        methodOptions.map((method, index) => [
+          method,
+          methodPillClassNames[index % methodPillClassNames.length],
+        ]),
+      ),
+    [methodOptions],
+  );
+  const contentTypeOptions = useMemo(
+    () =>
+      Array.from(
+        new Set([
+          ...contentTypeFilters,
+          ...projectEntries.flatMap((entry) => getContentTypes(entry)),
+        ]),
+      ).sort((left, right) => left.localeCompare(right)),
+    [contentTypeFilters, projectEntries],
+  );
   const visibleEntries = useMemo(() => {
     const query = filter.trim().toLowerCase();
     const filtered = projectEntries.filter((entry) => {
       if (hostFilter && (entry.host || "(unknown)") !== hostFilter) {
         return false;
+      }
+
+      if (
+        methodFilters.length > 0 &&
+        !methodFilters.includes(getMethodType(entry))
+      ) {
+        return false;
+      }
+
+      if (contentTypeFilters.length > 0) {
+        const entryContentTypes = getContentTypes(entry);
+
+        if (
+          !entryContentTypes.some((contentType) =>
+            contentTypeFilters.includes(contentType),
+          )
+        ) {
+          return false;
+        }
       }
 
       return !query || getSearchText(entry).includes(query);
@@ -479,7 +613,14 @@ export default function Homeview() {
         modifier
       );
     });
-  }, [filter, hostFilter, projectEntries, sort]);
+  }, [
+    contentTypeFilters,
+    filter,
+    hostFilter,
+    methodFilters,
+    projectEntries,
+    sort,
+  ]);
   const proxyDetails = useMemo(() => {
     if (!proxyURL) return { host: "-", port: "-", url: "-" };
 
@@ -541,6 +682,8 @@ export default function Homeview() {
     setSelectedID(null);
     setPinnedIDs([]);
     setHostFilter(null);
+    setMethodFilters([]);
+    setContentTypeFilters([]);
     setRequestProjectIDs({});
     setDetailsOpen(false);
   }
@@ -740,6 +883,10 @@ export default function Homeview() {
           setDetailsHeight(ui.detailsHeight || 320);
           setFilter(ui.filter ?? "");
           setHostFilter(ui.hostFilter ?? null);
+          setMethodFilters(ui.methodFilters ?? []);
+          setContentTypeFilters(
+            (ui.contentTypeFilters ?? []).map(normalizeContentType),
+          );
           setActiveProjectID(ui.activeSessionId || defaultProjectID);
           activeProjectIDRef.current = ui.activeSessionId || defaultProjectID;
           if (ui.sort?.key && ui.sort?.direction) {
@@ -799,6 +946,8 @@ export default function Homeview() {
           detailsHeight,
           filter,
           hostFilter: hostFilter ?? undefined,
+          methodFilters,
+          contentTypeFilters,
           activeSessionId: activeProjectID,
           sort,
         },
@@ -816,6 +965,7 @@ export default function Homeview() {
     return () => window.clearTimeout(timeout);
   }, [
     activeProjectID,
+    contentTypeFilters,
     detailsHeight,
     detailsOpen,
     filter,
@@ -823,6 +973,7 @@ export default function Homeview() {
     isDark,
     leftPanelOpen,
     leftPanelWidth,
+    methodFilters,
     pinnedIDs,
     projects,
     requestProjectIDs,
@@ -897,7 +1048,19 @@ export default function Homeview() {
             className="relative flex min-w-0 shrink-0 flex-col border-r bg-card"
             style={{ width: leftPanelWidth }}
           >
-            <div className="border-b p-3 text-sm font-semibold">Sessions</div>
+            <div className="flex items-center justify-between gap-2 border-b p-3">
+              <div className="min-w-0 truncate text-sm font-semibold">
+                Sessions
+              </div>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={() => setLeftPanelOpen(false)}
+                aria-label="Close left panel"
+              >
+                <X className="size-3" />
+              </Button>
+            </div>
             <section className="shrink-0 border-b p-2">
               <form
                 className="flex gap-1"
@@ -1038,111 +1201,193 @@ export default function Homeview() {
           </header>
 
           <div className="flex min-h-0 flex-1 flex-col bg-card">
-          <div className="min-h-0 flex-1 border-b">
-            <Table
-              className="table-fixed"
-              containerClassName="h-full overflow-y-auto !overflow-x-hidden"
-            >
-              <TableHeader className="sticky top-0 z-10 bg-muted/60">
-                <TableRow>
-                  {tableColumns.map((column) => (
-                    <TableHead
-                      key={column.key}
-                      className={[
-                        column.className,
-                        column.align === "right" ? "text-right" : "",
-                      ]
-                        .filter(Boolean)
-                        .join(" ")}
+            <div className="shrink-0 overflow-x-auto border-b bg-muted/30 p-2">
+              <div className="flex w-max items-center gap-2">
+                <ToggleGroup
+                  type="multiple"
+                  variant="outline"
+                  size="sm"
+                  spacing={1}
+                  value={methodFilters}
+                  onValueChange={setMethodFilters}
+                  aria-label="Filter by method"
+                  className="shrink-0"
+                >
+                  {methodOptions.map((method) => (
+                    <ToggleGroupItem
+                      key={method}
+                      value={method}
+                      aria-label={`Filter ${method}`}
+                      className="h-7 px-2 text-xs"
                     >
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className={[
-                          "h-8 px-0 hover:bg-transparent",
-                          column.align === "right" ? "ml-auto" : "",
-                        ]
-                          .filter(Boolean)
-                          .join(" ")}
-                        onClick={() => sortBy(column.key)}
-                      >
-                        {column.label}
-                        {sort.key === column.key ? (
-                          sort.direction === "asc" ? (
-                            <ArrowUp className="size-3" />
-                          ) : (
-                            <ArrowDown className="size-3" />
-                          )
-                        ) : null}
-                      </Button>
-                    </TableHead>
+                      {method}
+                    </ToggleGroupItem>
                   ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {visibleEntries.length === 0 ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={8}
-                      className="h-36 text-center text-muted-foreground"
+                </ToggleGroup>
+
+                <div className="h-6 w-px shrink-0 bg-border" />
+
+                <ToggleGroup
+                  type="multiple"
+                  variant="outline"
+                  size="sm"
+                  spacing={1}
+                  value={contentTypeFilters}
+                  onValueChange={setContentTypeFilters}
+                  aria-label="Filter by content type"
+                  className="shrink-0"
+                >
+                  {contentTypeOptions.map((contentType) => (
+                    <ToggleGroupItem
+                      key={contentType}
+                      value={contentType}
+                      aria-label={`Filter ${contentType}`}
+                      className="h-7 max-w-32 px-2 text-xs"
+                      title={contentType}
                     >
-                      <div className="flex flex-col items-center justify-center gap-3">
-                        <div>No traffic yet</div>
-                        <MobileSetupDialog
-                          certURL={certURL}
-                          proxyDetails={proxyDetails}
-                          trigger={
-                            <Button variant="outline">
-                              <Smartphone className="size-4" />
-                              Setup
+                      <span className="truncate">{contentType}</span>
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+              </div>
+            </div>
+            <div className="min-h-0 flex-1">
+              <Table
+                className="table-fixed text-xs"
+                containerClassName="h-full overflow-y-auto !overflow-x-hidden"
+              >
+                <TableHeader className="sticky top-0 z-10 bg-muted/60 [&_tr]:border-b-0">
+                  <TableRow className="border-b-0 hover:bg-transparent">
+                    {tableColumns.map((column) => {
+                      const sortKey = column.sortKey;
+
+                      return (
+                        <TableHead
+                          key={column.id}
+                          className={[
+                            "h-7 px-2",
+                            column.className,
+                            column.align === "right" ? "text-right" : "",
+                          ]
+                            .filter(Boolean)
+                            .join(" ")}
+                        >
+                          {sortKey ? (
+                            <Button
+                              variant="ghost"
+                              size="xs"
+                              className={[
+                                "h-6 px-0 text-xs hover:bg-transparent",
+                                column.align === "right" ? "ml-auto" : "",
+                              ]
+                                .filter(Boolean)
+                                .join(" ")}
+                              onClick={() => sortBy(sortKey)}
+                            >
+                              {column.label}
+                              {sort.key === sortKey ? (
+                                sort.direction === "asc" ? (
+                                  <ArrowUp className="size-3" />
+                                ) : (
+                                  <ArrowDown className="size-3" />
+                                )
+                              ) : null}
                             </Button>
-                          }
-                        />
-                      </div>
-                    </TableCell>
+                          ) : (
+                            <span>{column.label}</span>
+                          )}
+                        </TableHead>
+                      );
+                    })}
                   </TableRow>
-                ) : (
-                  visibleEntries.map((entry) => (
-                    <TableRow
-                      key={entry.id}
-                      className="cursor-pointer"
-                      data-state={
-                        selectedID === entry.id ? "selected" : undefined
-                      }
-                      onClick={() => openEntry(entry)}
-                      onContextMenu={(event) => {
-                        event.preventDefault();
-                        pinEntry(entry);
-                      }}
-                    >
-                    <TableCell className="whitespace-nowrap">
-                      {formatTime(entry.time)}
-                    </TableCell>
-                    <TableCell className="truncate">
-                      {entry.isConnect ? "CONNECT" : entry.method}
-                    </TableCell>
-                    <TableCell className="truncate">
-                      {entry.host}
-                    </TableCell>
-                    <TableCell className="truncate">
-                      {entry.error || entry.url}
-                    </TableCell>
-                    <TableCell className="truncate text-right">
-                      {entry.status || "-"}
-                    </TableCell>
-                    <TableCell className="truncate text-right">
-                      {formatBytes(entry.bytes)}
-                    </TableCell>
-                    <TableCell className="truncate text-right">
-                      {entry.durationMs} ms
-                    </TableCell>
-                    <TableCell className="truncate">{entry.client}</TableCell>
+                </TableHeader>
+                <TableBody>
+                  {visibleEntries.length === 0 ? (
+                    <TableRow className="border-b-0">
+                      <TableCell
+                        colSpan={10}
+                        className="h-36 text-center text-muted-foreground"
+                      >
+                        <div className="flex flex-col items-center justify-center gap-3">
+                          <div>No traffic yet</div>
+                          <MobileSetupDialog
+                            certURL={certURL}
+                            proxyDetails={proxyDetails}
+                            trigger={
+                              <Button variant="outline">
+                                <Smartphone className="size-4" />
+                                Setup
+                              </Button>
+                            }
+                          />
+                        </div>
+                      </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                  ) : (
+                    visibleEntries.map((entry, index) => {
+                      const method = getMethodType(entry);
+                      const contentType = getPrimaryContentType(entry);
+
+                      return (
+                        <TableRow
+                          key={entry.id}
+                          className="cursor-pointer border-b-0 odd:bg-card even:bg-muted/30 hover:bg-muted data-[state=selected]:bg-muted"
+                          data-state={
+                            selectedID === entry.id ? "selected" : undefined
+                          }
+                          onClick={() => openEntry(entry)}
+                          onContextMenu={(event) => {
+                            event.preventDefault();
+                            pinEntry(entry);
+                          }}
+                        >
+                          <TableCell className="px-2 py-1 text-right text-muted-foreground">
+                            {index + 1}
+                          </TableCell>
+                          <TableCell className="px-2 py-1 whitespace-nowrap">
+                            {formatTime(entry.time)}
+                          </TableCell>
+                          <TableCell className="px-2 py-1">
+                            <span
+                              className={[
+                                "inline-flex max-w-full items-center px-2 py-0.5 text-[11px] font-semibold ring-1",
+                                methodClassNames.get(method) ??
+                                  methodPillClassNames[0],
+                              ]
+                                .filter(Boolean)
+                                .join(" ")}
+                            >
+                              <span className="truncate">{method}</span>
+                            </span>
+                          </TableCell>
+                          <TableCell className="truncate px-2 py-1">
+                            {contentType}
+                          </TableCell>
+                          <TableCell className="truncate px-2 py-1">
+                            {entry.host}
+                          </TableCell>
+                          <TableCell className="truncate px-2 py-1">
+                            {entry.error || entry.url}
+                          </TableCell>
+                          <TableCell className="truncate px-2 py-1 text-right">
+                            {entry.status || "-"}
+                          </TableCell>
+                          <TableCell className="truncate px-2 py-1 text-right">
+                            {formatBytes(entry.bytes)}
+                          </TableCell>
+                          <TableCell className="truncate px-2 py-1 text-right">
+                            {entry.durationMs} ms
+                          </TableCell>
+                          <TableCell className="truncate px-2 py-1">
+                            {entry.client}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </div>
 
           {detailsOpen ? (
             <aside
@@ -1268,7 +1513,19 @@ export default function Homeview() {
             className="relative flex min-w-0 shrink-0 flex-col border-l bg-card"
             style={{ width: rightPanelWidth }}
           >
-            <div className="border-b p-3 text-sm font-semibold">Requests</div>
+            <div className="flex items-center justify-between gap-2 border-b p-3">
+              <div className="min-w-0 truncate text-sm font-semibold">
+                Requests
+              </div>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={() => setRightPanelOpen(false)}
+                aria-label="Close right panel"
+              >
+                <X className="size-3" />
+              </Button>
+            </div>
             <section className="flex max-h-[50%] min-h-0 shrink-0 flex-col border-b p-2">
               <div className="mb-2 shrink-0 px-2 text-xs font-medium text-muted-foreground">
                 Pinned

@@ -78,17 +78,19 @@ type SortState struct {
 }
 
 type UIState struct {
-	IsDark          bool      `json:"isDark"`
-	LeftPanelOpen   bool      `json:"leftPanelOpen"`
-	RightPanelOpen  bool      `json:"rightPanelOpen"`
-	DetailsOpen     bool      `json:"detailsOpen"`
-	LeftPanelWidth  float64   `json:"leftPanelWidth"`
-	RightPanelWidth float64   `json:"rightPanelWidth"`
-	DetailsHeight   float64   `json:"detailsHeight"`
-	Filter          string    `json:"filter"`
-	HostFilter      *string   `json:"hostFilter"`
-	ActiveSessionID string    `json:"activeSessionId"`
-	Sort            SortState `json:"sort"`
+	IsDark             bool      `json:"isDark"`
+	LeftPanelOpen      bool      `json:"leftPanelOpen"`
+	RightPanelOpen     bool      `json:"rightPanelOpen"`
+	DetailsOpen        bool      `json:"detailsOpen"`
+	LeftPanelWidth     float64   `json:"leftPanelWidth"`
+	RightPanelWidth    float64   `json:"rightPanelWidth"`
+	DetailsHeight      float64   `json:"detailsHeight"`
+	Filter             string    `json:"filter"`
+	HostFilter         *string   `json:"hostFilter"`
+	MethodFilters      []string  `json:"methodFilters"`
+	ContentTypeFilters []string  `json:"contentTypeFilters"`
+	ActiveSessionID    string    `json:"activeSessionId"`
+	Sort               SortState `json:"sort"`
 }
 
 type AppState struct {
