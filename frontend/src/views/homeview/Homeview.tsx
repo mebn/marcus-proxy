@@ -386,14 +386,6 @@ export default function Homeview() {
   }, [isDark]);
 
   useEffect(() => {
-    const stopRubberBand = (event: WheelEvent) => {
-      if (shouldBlockRubberBand(event)) event.preventDefault();
-    };
-    document.addEventListener("wheel", stopRubberBand, { passive: false });
-    return () => document.removeEventListener("wheel", stopRubberBand);
-  }, []);
-
-  useEffect(() => {
     const openPanelShortcut = (event: KeyboardEvent) => {
       if (!event.metaKey || event.shiftKey || event.altKey || event.ctrlKey)
         return;
@@ -754,39 +746,4 @@ function stringKeyMap(values: Record<number, string>) {
   return Object.fromEntries(
     Object.entries(values).map(([id, sessionID]) => [String(id), sessionID]),
   );
-}
-
-function getScrollableParent(target: EventTarget | null) {
-  let element = target instanceof Element ? target : null;
-  while (element) {
-    const style = window.getComputedStyle(element);
-    const canScrollY =
-      /(auto|scroll)/.test(style.overflowY) &&
-      element.scrollHeight > element.clientHeight;
-    const canScrollX =
-      /(auto|scroll)/.test(style.overflowX) &&
-      element.scrollWidth > element.clientWidth;
-    if (canScrollY || canScrollX) return element;
-    element = element.parentElement;
-  }
-  return null;
-}
-
-function shouldBlockRubberBand(event: WheelEvent) {
-  const element = getScrollableParent(event.target);
-  if (!element) return true;
-  const canScrollY = element.scrollHeight > element.clientHeight;
-  const canScrollX = element.scrollWidth > element.clientWidth;
-  const atTop = element.scrollTop <= 0;
-  const atLeft = element.scrollLeft <= 0;
-  const atBottom =
-    Math.ceil(element.scrollTop + element.clientHeight) >= element.scrollHeight;
-  const atRight =
-    Math.ceil(element.scrollLeft + element.clientWidth) >= element.scrollWidth;
-  const blocksY = (event.deltaY < 0 && atTop) || (event.deltaY > 0 && atBottom);
-  const blocksX = (event.deltaX < 0 && atLeft) || (event.deltaX > 0 && atRight);
-
-  if (Math.abs(event.deltaY) >= Math.abs(event.deltaX))
-    return !canScrollY || blocksY;
-  return !canScrollX || blocksX;
 }
