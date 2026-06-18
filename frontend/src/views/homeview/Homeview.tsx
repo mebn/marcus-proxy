@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AppFooter } from "@/components/custom/app-footer";
 import { ConfirmDialog } from "@/components/custom/confirm-dialog";
 import {
   defaultProject,
@@ -23,7 +22,10 @@ import {
 } from "@/components/custom/proxy-data";
 import { RequestDetails } from "@/components/custom/request-details";
 import { RequestSidebar } from "@/components/custom/request-sidebar";
-import { RequestToolbar } from "@/components/custom/request-toolbar";
+import {
+  RequestFilterBar,
+  RequestToolbar,
+} from "@/components/custom/request-toolbar";
 import { SessionSidebar } from "@/components/custom/session-sidebar";
 import { TrafficTable } from "@/components/custom/traffic-table";
 import {
@@ -465,6 +467,20 @@ export default function Homeview() {
 
   return (
     <main className="flex h-screen w-screen max-w-screen select-none flex-col overflow-hidden bg-card text-card-foreground">
+      <RequestToolbar
+        certURL={certURL}
+        detailsOpen={detailsOpen}
+        isCapturing={isCapturing}
+        leftPanelOpen={leftPanelOpen}
+        proxyDetails={proxyDetails}
+        rightPanelOpen={rightPanelOpen}
+        onClear={() => setClearConfirmOpen(true)}
+        onDetailsToggle={() => setDetailsOpen((current) => !current)}
+        onLeftToggle={() => setLeftPanelOpen((current) => !current)}
+        onRightToggle={() => setRightPanelOpen((current) => !current)}
+        onToggleCapture={() => void toggleCapture()}
+      />
+
       <section className="flex min-h-0 w-full flex-1 bg-card">
         {leftPanelOpen ? (
           <SessionSidebar
@@ -483,21 +499,16 @@ export default function Homeview() {
         ) : null}
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <RequestToolbar
-            certURL={certURL}
+          <RequestFilterBar
             contentTypeFilters={contentTypeFilters}
             contentTypeOptions={contentTypeOptions}
             error={error}
             filter={filter}
-            isCapturing={isCapturing}
             methodFilters={methodFilters}
             methodOptions={methodOptions}
-            proxyDetails={proxyDetails}
-            onClear={() => setClearConfirmOpen(true)}
             onContentTypesChange={setContentTypeFilters}
             onFilterChange={setFilter}
             onMethodsChange={setMethodFilters}
-            onToggleCapture={() => void toggleCapture()}
           />
 
           <div className="flex min-h-0 flex-1 flex-col bg-card">
@@ -568,15 +579,6 @@ export default function Homeview() {
           clearTable();
           setClearConfirmOpen(false);
         }}
-      />
-
-      <AppFooter
-        detailsOpen={detailsOpen}
-        leftPanelOpen={leftPanelOpen}
-        rightPanelOpen={rightPanelOpen}
-        onDetailsToggle={() => setDetailsOpen((current) => !current)}
-        onLeftToggle={() => setLeftPanelOpen((current) => !current)}
-        onRightToggle={() => setRightPanelOpen((current) => !current)}
       />
     </main>
   );

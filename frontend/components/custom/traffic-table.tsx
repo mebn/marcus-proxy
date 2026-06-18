@@ -185,7 +185,7 @@ export function TrafficTable({
                     type="button"
                     variant="ghost"
                     size="icon-xs"
-                    className="absolute top-0 right-0 h-full w-2 cursor-col-resize rounded-none border-l border-border/60 px-0 hover:bg-muted"
+                    className="absolute top-0 right-0 h-full w-2 cursor-col-resize rounded-none px-0 hover:bg-muted"
                     onClick={(event) => event.stopPropagation()}
                     onPointerDown={(event) => startColumnResize(column, event)}
                   />

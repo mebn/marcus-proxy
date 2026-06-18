@@ -8,7 +8,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Separator } from "@/components/ui/separator";
 import type { ProxyDetails } from "./proxy-data";
 
 type MobileSetupDialogProps = {
@@ -48,8 +47,6 @@ export function MobileSetupDialog({
             </div>
           </SetupStep>
 
-          <Separator />
-
           <SetupStep number="2" title="Install certificate">
             <div className="text-muted-foreground">
               Scan QR code or open URL on phone.
@@ -67,8 +64,6 @@ export function MobileSetupDialog({
               </div>
             </div>
           </SetupStep>
-
-          <Separator />
 
           <SetupStep number="3" title="Trust certificate">
             <div className="text-muted-foreground">

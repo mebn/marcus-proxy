@@ -33,7 +33,7 @@ export function RequestDetails({
       style={{ height }}
     >
       <div
-        className="flex cursor-row-resize items-start justify-between gap-3 border-b bg-muted/60 p-3"
+        className="flex cursor-row-resize items-start justify-between gap-3 bg-muted/60 p-3"
         onPointerDown={onResizeStart}
       >
         <div className="min-w-0">
@@ -78,7 +78,7 @@ function SelectedRequest({ entry }: { entry: TrafficEntry }) {
         {entry.error ? (
           <div>
             <div className="mb-1 text-xs text-muted-foreground">Error</div>
-            <pre className="max-h-28 overflow-auto border p-2 text-xs whitespace-pre-wrap">
+            <pre className="max-h-28 overflow-auto p-2 text-xs whitespace-pre-wrap">
               {entry.error}
             </pre>
           </div>
@@ -130,7 +130,7 @@ function DetailBlock({
         </Button>
       </CollapsibleTrigger>
 
-      <CollapsibleContent className="min-w-0 border-t">
+      <CollapsibleContent className="min-w-0">
         {children}
       </CollapsibleContent>
     </Collapsible>
@@ -139,7 +139,7 @@ function DetailBlock({
 
 function DetailPre({ children }: { children: ReactNode }) {
   return (
-    <pre className="max-h-44 max-w-full overflow-auto p-3 text-xs whitespace-pre">
+    <pre className="max-h-44 max-w-full select-text overflow-auto p-3 text-xs whitespace-pre">
       {children}
     </pre>
   );
@@ -155,7 +155,7 @@ function EmptyDetails() {
 
 function InfoBox({ label, value }: { label: string; value: string }) {
   return (
-    <div className="border p-2">
+    <div className="p-2">
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className="break-all">{value}</div>
     </div>

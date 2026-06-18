@@ -85,7 +85,7 @@ function PinnedRequests({
   selectedID,
 }: PinnedRequestsProps) {
   return (
-    <section className="flex max-h-[50%] min-h-0 shrink-0 flex-col border-b p-2">
+    <section className="flex max-h-[50%] min-h-0 shrink-0 flex-col p-2">
       <div className="mb-2 shrink-0 px-2 text-xs font-medium text-muted-foreground">
         Pinned
       </div>
@@ -195,7 +195,7 @@ function PanelHeader({
   title: string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-2 border-b p-3">
+    <div className="flex items-center justify-between gap-2 p-3">
       <div className="min-w-0 truncate text-sm font-semibold">{title}</div>
       <Button
         variant="ghost"

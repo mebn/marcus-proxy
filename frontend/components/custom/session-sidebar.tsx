@@ -42,7 +42,7 @@ export function SessionSidebar({
         onClose={onClose}
         label="Close left panel"
       />
-      <section className="shrink-0 border-b p-2">
+      <section className="shrink-0 p-2">
         <form
           className="flex gap-1"
           onSubmit={(event) => {
@@ -53,6 +53,9 @@ export function SessionSidebar({
           <Input
             value={newProjectName}
             onChange={(event) => onNameChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") event.currentTarget.blur();
+            }}
             placeholder="Session name"
             aria-label="Session name"
             className="h-8 min-w-0"
@@ -115,7 +118,7 @@ export function SessionSidebar({
 
 function PanelHeader({ label, onClose, title }: PanelHeaderProps) {
   return (
-    <div className="flex items-center justify-between gap-2 border-b p-3">
+    <div className="flex items-center justify-between gap-2 p-3">
       <div className="min-w-0 truncate text-sm font-semibold">{title}</div>
       <Button
         variant="ghost"
