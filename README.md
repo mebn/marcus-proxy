@@ -6,8 +6,6 @@ A forward proxy for capturing, inspecting, and analyzing API traffic from mobile
   <img src="images/homeview3.png" width="1000">
 </p>
 
-> **_NOTE:_** This project is in early development. Expected features may be missing, and the codebase is still being refactored.
-
 ## Why?
 
 To reverse engineer the APIs used by mobile apps, of course!
