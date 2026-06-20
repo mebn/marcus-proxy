@@ -28,6 +28,8 @@ type TrafficEntry struct {
 	ResponseBody          string              `json:"responseBody,omitempty"`
 	RequestBodyTruncated  bool                `json:"requestBodyTruncated"`
 	ResponseBodyTruncated bool                `json:"responseBodyTruncated"`
+	Paused                bool                `json:"paused,omitempty"`
+	InterceptPhase        string              `json:"interceptPhase,omitempty"`
 }
 
 type Status struct {
@@ -41,22 +43,31 @@ type Status struct {
 	Recent           []TrafficEntry `json:"recent"`
 }
 
+type InterceptSettings struct {
+	EditRequest  bool `json:"editRequest"`
+	EditResponse bool `json:"editResponse"`
+}
+
 type Recorder func(TrafficEntry)
 
 type Server struct {
-	mu        sync.Mutex
-	server    *http.Server
-	listener  net.Listener
-	client    *http.Client
-	authority *Authority
-	nextID    int64
-	traffic   []TrafficEntry
-	onRecord  Recorder
+	mu                sync.Mutex
+	server            *http.Server
+	listener          net.Listener
+	client            *http.Client
+	authority         *Authority
+	nextID            int64
+	traffic           []TrafficEntry
+	onRecord          Recorder
+	onIntercept       Recorder
+	interceptSettings InterceptSettings
+	pendingIntercepts map[int64]chan TrafficEntry
 }
 
 func NewServer(onRecord Recorder) *Server {
 	return &Server{
-		client:   &http.Client{Transport: http.DefaultTransport},
-		onRecord: onRecord,
+		client:            &http.Client{Transport: http.DefaultTransport},
+		onRecord:          onRecord,
+		pendingIntercepts: make(map[int64]chan TrafficEntry),
 	}
 }

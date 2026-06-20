@@ -5,8 +5,14 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { ArrowDown, ArrowUp, Smartphone } from "lucide-react";
+import { ArrowDown, ArrowUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import {
   Table,
   TableBody,
@@ -15,7 +21,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { MobileSetupDialog } from "./mobile-setup-dialog";
 import {
   formatBytes,
   formatTime,
@@ -24,7 +29,6 @@ import {
   methodPillClassNames,
   tableColumns,
   type TableColumn,
-  type ProxyDetails,
   type SortKey,
   type SortState,
   type TrafficEntry,
@@ -34,13 +38,12 @@ const tableRowHeight = 28;
 const overscanRows = 16;
 
 type TrafficTableProps = {
-  certURL: string;
   entries: TrafficEntry[];
   methodClassNames: Map<string, string>;
-  proxyDetails: ProxyDetails;
   selectedID: number | null;
   sort: SortState;
   onOpen: (entry: TrafficEntry) => void;
+  onEditAndResend: (entry: TrafficEntry) => void;
   onPin: (entry: TrafficEntry) => void;
   onSort: (key: SortKey) => void;
 };
@@ -56,19 +59,19 @@ type TrafficRowProps = {
   index: number;
   methodClassNames: Map<string, string>;
   onOpen: (entry: TrafficEntry) => void;
+  onEditAndResend: (entry: TrafficEntry) => void;
   onPin: (entry: TrafficEntry) => void;
   requestNumber: number;
   selected: boolean;
 };
 
 export function TrafficTable({
-  certURL,
   entries,
   methodClassNames,
-  proxyDetails,
   selectedID,
   sort,
   onOpen,
+  onEditAndResend,
   onPin,
   onSort,
 }: TrafficTableProps) {
@@ -144,6 +147,10 @@ export function TrafficTable({
     resizeObserver.observe(element);
     return () => resizeObserver.disconnect();
   }, []);
+
+  if (entries.length === 0) {
+    return <div className="min-h-0 flex-1" />;
+  }
 
   function startColumnResize(
     column: TableColumn,
@@ -247,36 +254,31 @@ export function TrafficTable({
         </TableHeader>
 
         <TableBody>
-          {entries.length === 0 ? (
-            <EmptyTable certURL={certURL} proxyDetails={proxyDetails} />
-          ) : (
-            <>
-              {virtualRows.topHeight > 0 ? (
-                <SpacerRow height={virtualRows.topHeight} />
-              ) : null}
+          {virtualRows.topHeight > 0 ? (
+            <SpacerRow height={virtualRows.topHeight} />
+          ) : null}
 
-              {virtualRows.rows.map((entry, index) => {
-                const rowIndex = virtualRows.startIndex + index;
+          {virtualRows.rows.map((entry, index) => {
+            const rowIndex = virtualRows.startIndex + index;
 
-                return (
-                  <TrafficRow
-                    entry={entry}
-                    index={rowIndex}
-                    key={entry.id}
-                    methodClassNames={methodClassNames}
-                    requestNumber={requestNumbers.get(entry.id) ?? rowIndex + 1}
-                    selected={selectedID === entry.id}
-                    onOpen={onOpen}
-                    onPin={onPin}
-                  />
-                );
-              })}
+            return (
+              <TrafficRow
+                entry={entry}
+                index={rowIndex}
+                key={entry.id}
+                methodClassNames={methodClassNames}
+                requestNumber={requestNumbers.get(entry.id) ?? rowIndex + 1}
+                selected={selectedID === entry.id}
+                onEditAndResend={onEditAndResend}
+                onOpen={onOpen}
+                onPin={onPin}
+              />
+            );
+          })}
 
-              {virtualRows.bottomHeight > 0 ? (
-                <SpacerRow height={virtualRows.bottomHeight} />
-              ) : null}
-            </>
-          )}
+          {virtualRows.bottomHeight > 0 ? (
+            <SpacerRow height={virtualRows.bottomHeight} />
+          ) : null}
         </TableBody>
       </Table>
     </div>
@@ -312,6 +314,7 @@ function TrafficRow({
   entry,
   index,
   methodClassNames,
+  onEditAndResend,
   onOpen,
   onPin,
   requestNumber,
@@ -319,61 +322,68 @@ function TrafficRow({
 }: TrafficRowProps) {
   const method = getMethodType(entry);
   return (
-    <TableRow
-      className={[
-        "h-7 cursor-pointer border-b-0 hover:bg-muted data-[state=selected]:bg-muted",
-        index % 2 === 0 ? "bg-card" : "bg-muted/30",
-      ].join(" ")}
-      data-state={selected ? "selected" : undefined}
-      onClick={() => onOpen(entry)}
-      onContextMenu={(event) => {
-        event.preventDefault();
-        onPin(entry);
-      }}
-    >
-      <TableCell className="px-2 py-1 text-right text-muted-foreground">
-        {requestNumber}
-      </TableCell>
-
-      <TableCell className="px-2 py-1 whitespace-nowrap">
-        {formatTime(entry.time)}
-      </TableCell>
-
-      <TableCell className="px-2 py-1">
-        <span
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <TableRow
           className={[
-            "inline-flex max-w-full items-center px-2 py-0.5 text-[11px] font-semibold ring-1",
-            methodClassNames.get(method) ?? methodPillClassNames[0],
+            "h-7 cursor-pointer border-b-0 hover:bg-muted data-[state=selected]:bg-muted",
+            index % 2 === 0 ? "bg-card" : "bg-muted/30",
           ].join(" ")}
+          data-state={selected ? "selected" : undefined}
+          onClick={() => onOpen(entry)}
         >
-          <span className="truncate">{method}</span>
-        </span>
-      </TableCell>
+          <TableCell className="px-2 py-1 text-right text-muted-foreground">
+            {requestNumber}
+          </TableCell>
 
-      <TableCell className="truncate px-2 py-1">
-        {getPrimaryContentType(entry)}
-      </TableCell>
+          <TableCell className="px-2 py-1 whitespace-nowrap">
+            {formatTime(entry.time)}
+          </TableCell>
 
-      <TableCell className="truncate px-2 py-1">{entry.host}</TableCell>
+          <TableCell className="px-2 py-1">
+            <span
+              className={[
+                "inline-flex max-w-full items-center px-2 py-0.5 text-[11px] font-semibold ring-1",
+                methodClassNames.get(method) ?? methodPillClassNames[0],
+              ].join(" ")}
+            >
+              <span className="truncate">{method}</span>
+            </span>
+          </TableCell>
 
-      <TableCell className="truncate px-2 py-1">
-        {entry.error || entry.url}
-      </TableCell>
+          <TableCell className="truncate px-2 py-1">
+            {getPrimaryContentType(entry)}
+          </TableCell>
 
-      <TableCell className="truncate px-2 py-1 text-right">
-        {entry.status || "-"}
-      </TableCell>
+          <TableCell className="truncate px-2 py-1">{entry.host}</TableCell>
 
-      <TableCell className="truncate px-2 py-1 text-right">
-        {formatBytes(entry.bytes)}
-      </TableCell>
+          <TableCell className="truncate px-2 py-1">
+            {entry.error || entry.url}
+          </TableCell>
 
-      <TableCell className="truncate px-2 py-1 text-right">
-        {entry.durationMs} ms
-      </TableCell>
+          <TableCell className="truncate px-2 py-1 text-right">
+            {entry.status || "-"}
+          </TableCell>
 
-      <TableCell className="truncate px-2 py-1">{entry.client}</TableCell>
-    </TableRow>
+          <TableCell className="truncate px-2 py-1 text-right">
+            {formatBytes(entry.bytes)}
+          </TableCell>
+
+          <TableCell className="truncate px-2 py-1 text-right">
+            {entry.durationMs} ms
+          </TableCell>
+
+          <TableCell className="truncate px-2 py-1">{entry.client}</TableCell>
+        </TableRow>
+      </ContextMenuTrigger>
+
+      <ContextMenuContent>
+        <ContextMenuItem onSelect={() => onPin(entry)}>Pin</ContextMenuItem>
+        <ContextMenuItem onSelect={() => onEditAndResend(entry)}>
+          Edit and resend
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 
@@ -381,37 +391,6 @@ function SpacerRow({ height }: { height: number }) {
   return (
     <TableRow aria-hidden="true" className="border-b-0 hover:bg-transparent">
       <TableCell colSpan={10} className="p-0" style={{ height }} />
-    </TableRow>
-  );
-}
-
-function EmptyTable({
-  certURL,
-  proxyDetails,
-}: {
-  certURL: string;
-  proxyDetails: ProxyDetails;
-}) {
-  return (
-    <TableRow className="border-b-0">
-      <TableCell
-        colSpan={10}
-        className="h-36 text-center text-muted-foreground"
-      >
-        <div className="flex flex-col items-center justify-center gap-3">
-          <div>No traffic yet</div>
-          <MobileSetupDialog
-            certURL={certURL}
-            proxyDetails={proxyDetails}
-            trigger={
-              <Button variant="outline">
-                <Smartphone className="size-4" />
-                Setup
-              </Button>
-            }
-          />
-        </div>
-      </TableCell>
     </TableRow>
   );
 }

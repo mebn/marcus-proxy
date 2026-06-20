@@ -28,21 +28,78 @@ func (s *Server) handleHTTP(rw http.ResponseWriter, req *http.Request, start tim
 		return
 	}
 
+	entryID := int64(0)
+	if s.shouldIntercept("request") || s.shouldIntercept("response") {
+		entryID = s.nextTrafficID()
+	}
+	if s.shouldIntercept("request") {
+		edited, err := s.pauseIntercept(req.Context(), TrafficEntry{
+			ID:                   entryID,
+			Time:                 time.Now().Format(time.RFC3339),
+			Method:               outReq.Method,
+			URL:                  target.String(),
+			Host:                 outReq.Host,
+			Client:               strings.Split(req.RemoteAddr, ":")[0],
+			RequestHeaders:       cloneHeader(outReq.Header),
+			RequestBody:          requestBody,
+			RequestBodyTruncated: requestBodyTruncated,
+			InterceptPhase:       "request",
+		})
+		if err != nil {
+			http.Error(rw, err.Error(), http.StatusGatewayTimeout)
+			s.recordHTTPExchangeWithID(entryID, outReq, target.String(), http.StatusGatewayTimeout, 0, start, req.RemoteAddr, err, requestBody, requestBodyTruncated, "", false, nil)
+			return
+		}
+		requestBody, requestBodyTruncated, err = applyRequestEdit(outReq, edited)
+		if err != nil {
+			http.Error(rw, err.Error(), http.StatusBadRequest)
+			s.recordHTTPExchangeWithID(entryID, outReq, target.String(), http.StatusBadRequest, 0, start, req.RemoteAddr, err, requestBody, requestBodyTruncated, "", false, nil)
+			return
+		}
+		target = outReq.URL
+	}
+
 	resp, err := s.client.Do(outReq)
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusBadGateway)
-		s.recordHTTPExchange(outReq, target.String(), http.StatusBadGateway, 0, start, req.RemoteAddr, err, requestBody, requestBodyTruncated, "", false, nil)
+		s.recordHTTPExchangeWithID(entryID, outReq, target.String(), http.StatusBadGateway, 0, start, req.RemoteAddr, err, requestBody, requestBodyTruncated, "", false, nil)
 		return
 	}
 	defer resp.Body.Close()
 
 	body, responseBody, responseBodyTruncated, responseHeaders, err := readResponse(resp)
+	if err == nil && s.shouldIntercept("response") {
+		edited, pauseErr := s.pauseIntercept(req.Context(), TrafficEntry{
+			ID:                    entryID,
+			Time:                  time.Now().Format(time.RFC3339),
+			Method:                outReq.Method,
+			URL:                   target.String(),
+			Host:                  outReq.Host,
+			Status:                resp.StatusCode,
+			Bytes:                 int64(len(body)),
+			DurationMs:            time.Since(start).Milliseconds(),
+			Client:                strings.Split(req.RemoteAddr, ":")[0],
+			RequestBytes:          outReq.ContentLength,
+			RequestHeaders:        cloneHeader(outReq.Header),
+			ResponseHeaders:       responseHeaders,
+			RequestBody:           requestBody,
+			ResponseBody:          responseBody,
+			RequestBodyTruncated:  requestBodyTruncated,
+			ResponseBodyTruncated: responseBodyTruncated,
+			InterceptPhase:        "response",
+		})
+		if pauseErr != nil {
+			err = pauseErr
+		} else {
+			body, responseBody, responseBodyTruncated, responseHeaders = applyResponseEdit(resp, edited)
+		}
+	}
 	copyHeader(rw.Header(), resp.Header)
 	rw.WriteHeader(resp.StatusCode)
 	if _, writeErr := rw.Write(body); writeErr != nil {
 		err = writeErr
 	}
-	s.recordHTTPExchange(outReq, target.String(), resp.StatusCode, int64(len(body)), start, req.RemoteAddr, err, requestBody, requestBodyTruncated, responseBody, responseBodyTruncated, responseHeaders)
+	s.recordHTTPExchangeWithID(entryID, outReq, target.String(), resp.StatusCode, int64(len(body)), start, req.RemoteAddr, err, requestBody, requestBodyTruncated, responseBody, responseBodyTruncated, responseHeaders)
 }
 
 func (s *Server) handleConnect(rw http.ResponseWriter, req *http.Request, start time.Time) {
@@ -118,21 +175,78 @@ func (s *Server) forwardTLSRequest(conn net.Conn, req *http.Request, connectHost
 		return true
 	}
 
+	entryID := int64(0)
+	if s.shouldIntercept("request") || s.shouldIntercept("response") {
+		entryID = s.nextTrafficID()
+	}
+	if s.shouldIntercept("request") {
+		edited, err := s.pauseIntercept(req.Context(), TrafficEntry{
+			ID:                   entryID,
+			Time:                 time.Now().Format(time.RFC3339),
+			Method:               req.Method,
+			URL:                  target.String(),
+			Host:                 req.Host,
+			Client:               strings.Split(remoteAddr, ":")[0],
+			RequestHeaders:       cloneHeader(req.Header),
+			RequestBody:          requestBody,
+			RequestBodyTruncated: requestBodyTruncated,
+			InterceptPhase:       "request",
+		})
+		if err != nil {
+			_ = writeErrorResponse(conn, http.StatusGatewayTimeout, err.Error())
+			s.recordHTTPExchangeWithID(entryID, req, target.String(), http.StatusGatewayTimeout, 0, start, remoteAddr, err, requestBody, requestBodyTruncated, "", false, nil)
+			return true
+		}
+		requestBody, requestBodyTruncated, err = applyRequestEdit(req, edited)
+		if err != nil {
+			_ = writeErrorResponse(conn, http.StatusBadRequest, err.Error())
+			s.recordHTTPExchangeWithID(entryID, req, target.String(), http.StatusBadRequest, 0, start, remoteAddr, err, requestBody, requestBodyTruncated, "", false, nil)
+			return true
+		}
+		target = req.URL
+	}
+
 	resp, err := s.client.Do(req)
 	if err != nil {
 		_ = writeErrorResponse(conn, http.StatusBadGateway, err.Error())
-		s.recordHTTPExchange(req, target.String(), http.StatusBadGateway, 0, start, remoteAddr, err, requestBody, requestBodyTruncated, "", false, nil)
+		s.recordHTTPExchangeWithID(entryID, req, target.String(), http.StatusBadGateway, 0, start, remoteAddr, err, requestBody, requestBodyTruncated, "", false, nil)
 		return true
 	}
 
 	body, responseBody, responseBodyTruncated, responseHeaders, err := readResponse(resp)
+	if err == nil && s.shouldIntercept("response") {
+		edited, pauseErr := s.pauseIntercept(req.Context(), TrafficEntry{
+			ID:                    entryID,
+			Time:                  time.Now().Format(time.RFC3339),
+			Method:                req.Method,
+			URL:                   target.String(),
+			Host:                  req.Host,
+			Status:                resp.StatusCode,
+			Bytes:                 int64(len(body)),
+			DurationMs:            time.Since(start).Milliseconds(),
+			Client:                strings.Split(remoteAddr, ":")[0],
+			RequestBytes:          req.ContentLength,
+			RequestHeaders:        cloneHeader(req.Header),
+			ResponseHeaders:       responseHeaders,
+			RequestBody:           requestBody,
+			ResponseBody:          responseBody,
+			RequestBodyTruncated:  requestBodyTruncated,
+			ResponseBodyTruncated: responseBodyTruncated,
+			InterceptPhase:        "response",
+		})
+		if pauseErr != nil {
+			err = pauseErr
+		} else {
+			body, responseBody, responseBodyTruncated, responseHeaders = applyResponseEdit(resp, edited)
+		}
+	}
 	resp.Body.Close()
 	resp.Body = io.NopCloser(bytes.NewReader(body))
 	resp.ContentLength = int64(len(body))
 	if writeErr := resp.Write(conn); writeErr != nil {
 		err = writeErr
 	}
-	s.recordHTTPExchange(req, target.String(), resp.StatusCode, int64(len(body)), start, remoteAddr, err, requestBody, requestBodyTruncated, responseBody, responseBodyTruncated, responseHeaders)
+	s.recordHTTPExchangeWithID(entryID, req, target.String(), resp.StatusCode, int64(len(body)), start, remoteAddr, err, requestBody, requestBodyTruncated, responseBody, responseBodyTruncated, responseHeaders)
 	return err == nil
 }
 
@@ -171,8 +285,13 @@ func (s *Server) recordFromRequest(req *http.Request, rawURL string, status int,
 	s.record(entry)
 }
 
-func (s *Server) recordHTTPExchange(req *http.Request, rawURL string, status int, bytes int64, start time.Time, remoteAddr string, err error, requestBody string, requestBodyTruncated bool, responseBody string, responseBodyTruncated bool, responseHeaders map[string][]string) {
+func (s *Server) recordHTTPExchange(req *http.Request, rawURL string, status int, bytes int64, start time.Time, remoteAddr string, err error, requestBody string, requestBodyTruncated bool, responseBody string, responseBodyTruncated bool, responseHeaders map[string][]string) TrafficEntry {
+	return s.recordHTTPExchangeWithID(0, req, rawURL, status, bytes, start, remoteAddr, err, requestBody, requestBodyTruncated, responseBody, responseBodyTruncated, responseHeaders)
+}
+
+func (s *Server) recordHTTPExchangeWithID(id int64, req *http.Request, rawURL string, status int, bytes int64, start time.Time, remoteAddr string, err error, requestBody string, requestBodyTruncated bool, responseBody string, responseBodyTruncated bool, responseHeaders map[string][]string) TrafficEntry {
 	entry := TrafficEntry{
+		ID:                    id,
 		Time:                  time.Now().Format(time.RFC3339),
 		Method:                req.Method,
 		URL:                   rawURL,
@@ -192,7 +311,7 @@ func (s *Server) recordHTTPExchange(req *http.Request, rawURL string, status int
 	if err != nil {
 		entry.Error = err.Error()
 	}
-	s.record(entry)
+	return s.record(entry)
 }
 
 func (s *Server) serveRootCertificate(rw http.ResponseWriter, req *http.Request) bool {

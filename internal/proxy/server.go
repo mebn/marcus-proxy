@@ -105,10 +105,12 @@ func (s *Server) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	s.handleHTTP(rw, req, start)
 }
 
-func (s *Server) record(entry TrafficEntry) {
+func (s *Server) record(entry TrafficEntry) TrafficEntry {
 	s.mu.Lock()
-	s.nextID++
-	entry.ID = s.nextID
+	if entry.ID == 0 {
+		s.nextID++
+		entry.ID = s.nextID
+	}
 	if entry.Time == "" {
 		entry.Time = time.Now().Format(time.RFC3339)
 	}
@@ -119,6 +121,7 @@ func (s *Server) record(entry TrafficEntry) {
 	if recorder != nil {
 		recorder(entry)
 	}
+	return entry
 }
 
 func (s *Server) statusLocked() Status {

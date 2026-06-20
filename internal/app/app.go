@@ -95,6 +95,27 @@ func (a *App) GetProxyStatus() captureproxy.Status {
 	return a.proxy.Status()
 }
 
+func (a *App) SetInterceptSettings(settings captureproxy.InterceptSettings) captureproxy.InterceptSettings {
+	if a.proxy == nil {
+		a.proxy = a.newProxy()
+	}
+	return a.proxy.SetInterceptSettings(settings)
+}
+
+func (a *App) ContinueIntercept(entry captureproxy.TrafficEntry) error {
+	if a.proxy == nil {
+		return nil
+	}
+	return a.proxy.ContinueIntercept(entry)
+}
+
+func (a *App) ResendRequest(entry captureproxy.TrafficEntry) (captureproxy.TrafficEntry, error) {
+	if a.proxy == nil {
+		a.proxy = a.newProxy()
+	}
+	return a.proxy.Resend(entry)
+}
+
 func (a *App) LoadAppState() (storage.AppState, error) {
 	if a.store == nil {
 		store, err := storage.Open()
@@ -136,7 +157,7 @@ func (a *App) GenerateNewCertificate() (captureproxy.Status, error) {
 }
 
 func (a *App) newProxy() *captureproxy.Server {
-	return captureproxy.NewServer(func(entry captureproxy.TrafficEntry) {
+	server := captureproxy.NewServer(func(entry captureproxy.TrafficEntry) {
 		if a.store != nil {
 			go func() {
 				_ = a.store.SaveTrafficEntry(entry)
@@ -146,4 +167,10 @@ func (a *App) newProxy() *captureproxy.Server {
 			runtime.EventsEmit(a.ctx, "traffic:new", entry)
 		}
 	})
+	server.SetInterceptHandler(func(entry captureproxy.TrafficEntry) {
+		if a.ctx != nil {
+			runtime.EventsEmit(a.ctx, "traffic:paused", entry)
+		}
+	})
+	return server
 }

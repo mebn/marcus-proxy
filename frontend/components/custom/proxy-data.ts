@@ -17,6 +17,8 @@ export type TrafficEntry = {
   responseBody?: string;
   requestBodyTruncated: boolean;
   responseBodyTruncated: boolean;
+  paused?: boolean;
+  interceptPhase?: "request" | "response";
 };
 
 export type ProxyStatus = {
@@ -63,6 +65,11 @@ export type ProxyDetails = {
   host: string;
   port: string;
   url: string;
+};
+
+export type InterceptSettings = {
+  editRequest: boolean;
+  editResponse: boolean;
 };
 
 export const defaultProjectID = "default";

@@ -1,6 +1,12 @@
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -16,6 +22,7 @@ type SessionPanelProps = {
   projects: Project[];
   onDelete: (project: Project) => void;
   onNameChange: (value: string) => void;
+  onRename: (project: Project) => void;
   onSave: () => void;
   onSelect: (projectID: string) => void;
 };
@@ -34,6 +41,7 @@ export function SessionsDialog({
   onDelete,
   onNameChange,
   onOpenChange,
+  onRename,
   onSave,
   onSelect,
 }: SessionsDialogProps) {
@@ -52,6 +60,7 @@ export function SessionsDialog({
             projects={projects}
             onDelete={onDelete}
             onNameChange={onNameChange}
+            onRename={onRename}
             onSave={onSave}
             onSelect={onSelect}
           />
@@ -68,6 +77,7 @@ function SessionPanel({
   projects,
   onDelete,
   onNameChange,
+  onRename,
   onSave,
   onSelect,
 }: SessionPanelProps) {
@@ -106,35 +116,54 @@ function SessionPanel({
       <section className="min-h-0 flex-1 overflow-auto p-2">
         <div className="grid gap-1 pr-1">
           {projects.map((project) => (
-            <div
-              key={project.id}
-              className="flex min-w-0 items-center gap-1 overflow-hidden"
-            >
-              <Button
-                variant={activeProjectID === project.id ? "secondary" : "ghost"}
-                size="sm"
-                className="h-8 min-w-0 flex-1 justify-between gap-2 overflow-hidden px-2"
-                onClick={() => onSelect(project.id)}
-              >
-                <span className="min-w-0 truncate">{project.name}</span>
-                <span className="shrink-0 text-xs text-muted-foreground">
-                  {projectCounts.get(project.id) ?? 0}
-                </span>
-              </Button>
+            <ContextMenu key={project.id}>
+              <ContextMenuTrigger asChild>
+                <div className="flex min-w-0 items-center gap-1 overflow-hidden">
+                  <Button
+                    variant={
+                      activeProjectID === project.id ? "secondary" : "ghost"
+                    }
+                    size="sm"
+                    className="h-8 min-w-0 flex-1 justify-between gap-2 overflow-hidden px-2"
+                    onClick={() => onSelect(project.id)}
+                  >
+                    <span className="min-w-0 truncate">{project.name}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {projectCounts.get(project.id) ?? 0}
+                    </span>
+                  </Button>
 
-              {project.id === defaultProjectID ? (
-                <div className="size-6 shrink-0" />
-              ) : (
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  onClick={() => onDelete(project)}
-                  aria-label={`Delete ${project.name}`}
+                  {project.id === defaultProjectID ? (
+                    <div className="size-6 shrink-0" />
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      onClick={() => onDelete(project)}
+                      aria-label={`Delete ${project.name}`}
+                    >
+                      <X className="size-3" />
+                    </Button>
+                  )}
+                </div>
+              </ContextMenuTrigger>
+
+              <ContextMenuContent>
+                <ContextMenuItem
+                  disabled={project.id === defaultProjectID}
+                  onSelect={() => onRename(project)}
                 >
-                  <X className="size-3" />
-                </Button>
-              )}
-            </div>
+                  Rename
+                </ContextMenuItem>
+                <ContextMenuItem
+                  disabled={project.id === defaultProjectID}
+                  variant="destructive"
+                  onSelect={() => onDelete(project)}
+                >
+                  Delete
+                </ContextMenuItem>
+              </ContextMenuContent>
+            </ContextMenu>
           ))}
         </div>
       </section>

@@ -1,5 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Smartphone } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/custom/confirm-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import {
   defaultProject,
   defaultProjectID,
@@ -12,6 +23,7 @@ import {
   normalizeContentType,
   normalizeStatus,
   type HostStat,
+  type InterceptSettings,
   type Project,
   type ProxyDetails,
   type ProxyStatus,
@@ -20,7 +32,11 @@ import {
   type SortState,
   type TrafficEntry,
 } from "@/components/custom/proxy-data";
-import { RequestInfoPanel } from "@/components/custom/request-info-panel";
+import {
+  RequestInfoPanel,
+  type RequestEditMode,
+} from "@/components/custom/request-info-panel";
+import { MobileSetupDialog } from "@/components/custom/mobile-setup-dialog";
 import { RequestsPanel } from "@/components/custom/requests-panel";
 import {
   RequestFilterBar,
@@ -29,9 +45,12 @@ import {
 import { SessionsDialog } from "@/components/custom/sessions-dialog";
 import { TrafficTable } from "@/components/custom/traffic-table";
 import {
+  ContinueIntercept,
   GetProxyStatus,
   LoadAppState,
+  ResendRequest,
   SaveAppState,
+  SetInterceptSettings,
   StartProxy,
 } from "@/wailsjs/go/app/App";
 import { EventsOn } from "@/wailsjs/runtime/runtime";
@@ -61,6 +80,8 @@ export default function Homeview() {
   const [activeProjectID, setActiveProjectID] = useState(defaultProjectID);
   const [newProjectName, setNewProjectName] = useState("");
   const [deleteProject, setDeleteProject] = useState<Project | null>(null);
+  const [renameProject, setRenameProject] = useState<Project | null>(null);
+  const [renameProjectName, setRenameProjectName] = useState("");
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [requestProjectIDs, setRequestProjectIDs] = useState<
     Record<number, string>
@@ -68,9 +89,17 @@ export default function Homeview() {
   const [storageReady, setStorageReady] = useState(false);
   const [isDark, setIsDark] = useState(true);
   const [isCapturing, setIsCapturing] = useState(true);
+  const [interceptSettings, setInterceptSettings] =
+    useState<InterceptSettings>({
+      editRequest: false,
+      editResponse: false,
+    });
+  const [editedEntry, setEditedEntry] = useState<TrafficEntry | null>(null);
+  const [editMode, setEditMode] = useState<RequestEditMode>("view");
 
   const isCapturingRef = useRef(isCapturing);
   const activeProjectIDRef = useRef(activeProjectID);
+  const interceptSettingsRef = useRef(interceptSettings);
 
   const proxyURL = useMemo(
     () => status.lanUrls[0] ?? status.address,
@@ -81,6 +110,7 @@ export default function Homeview() {
     () => status.recent.find((entry) => entry.id === selectedID) ?? null,
     [selectedID, status.recent],
   );
+  const detailsEntry = editedEntry ?? selectedEntry;
   const projectEntries = useMemo(
     () =>
       status.recent.filter(
@@ -189,6 +219,17 @@ export default function Homeview() {
     if (status.running || (await startProxy())) setIsCapturing(true);
   }
 
+  async function updateInterceptSettings(patch: Partial<InterceptSettings>) {
+    const next = { ...interceptSettingsRef.current, ...patch };
+    interceptSettingsRef.current = next;
+    setInterceptSettings(next);
+    try {
+      await SetInterceptSettings(next);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   function clearTable() {
     setStatus((current) => ({ ...current, recent: [] }));
     setSelectedID(null);
@@ -197,6 +238,8 @@ export default function Homeview() {
     setMethodFilters([]);
     setContentTypeFilters([]);
     setRequestProjectIDs({});
+    setEditedEntry(null);
+    setEditMode("view");
     setDetailsOpen(false);
   }
 
@@ -252,6 +295,25 @@ export default function Homeview() {
     setDeleteProject(null);
   }
 
+  function openRenameProject(project: Project) {
+    if (project.id === defaultProjectID) return;
+    setRenameProject(project);
+    setRenameProjectName(project.name);
+  }
+
+  function confirmRenameProject() {
+    if (!renameProject || renameProject.id === defaultProjectID) return;
+    const name = renameProjectName.trim();
+    if (!name) return;
+    setProjects((current) =>
+      current.map((project) =>
+        project.id === renameProject.id ? { ...project, name } : project,
+      ),
+    );
+    setRenameProject(null);
+    setRenameProjectName("");
+  }
+
   function sortBy(key: SortKey) {
     setSort((current) => ({
       key,
@@ -262,13 +324,40 @@ export default function Homeview() {
 
   function openEntry(entry: TrafficEntry) {
     setSelectedID(entry.id);
+    setEditedEntry(null);
+    setEditMode("view");
     setDetailsOpen(true);
+  }
+
+  function editAndResend(entry: TrafficEntry) {
+    setSelectedID(entry.id);
+    setEditedEntry({ ...entry, interceptPhase: "request" });
+    setEditMode("resend-request");
+    setDetailsOpen(true);
+  }
+
+  async function continueEditedEntry() {
+    if (!editedEntry) return;
+    setError("");
+    try {
+      if (editMode === "resend-request") {
+        await ResendRequest(editedEntry);
+      } else {
+        await ContinueIntercept(editedEntry);
+      }
+      setEditedEntry(null);
+      setEditMode("view");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
   }
 
   function selectProject(projectID: string) {
     setActiveProjectID(projectID);
     setHostFilter(null);
     setSelectedID(null);
+    setEditedEntry(null);
+    setEditMode("view");
   }
 
   function startDetailsResize(event: React.PointerEvent<HTMLElement>) {
@@ -354,6 +443,23 @@ export default function Homeview() {
     });
   }, []);
 
+  useEffect(
+    () =>
+      EventsOn("traffic:paused", (entry: TrafficEntry) => {
+        setRequestProjectIDs((current) => ({
+          ...current,
+          [entry.id]: activeProjectIDRef.current,
+        }));
+        setSelectedID(entry.id);
+        setEditedEntry(entry);
+        setEditMode(
+          entry.interceptPhase === "response" ? "edit-response" : "edit-request",
+        );
+        setDetailsOpen(true);
+      }),
+    [],
+  );
+
   useEffect(() => {
     isCapturingRef.current = isCapturing;
   }, [isCapturing]);
@@ -361,6 +467,10 @@ export default function Homeview() {
   useEffect(() => {
     activeProjectIDRef.current = activeProjectID;
   }, [activeProjectID]);
+
+  useEffect(() => {
+    interceptSettingsRef.current = interceptSettings;
+  }, [interceptSettings]);
 
   useEffect(() => {
     if (!storageReady) return;
@@ -554,41 +664,75 @@ export default function Homeview() {
         <div className="flex min-w-0 flex-1 flex-col">
           <RequestFilterBar
             contentTypeFilters={contentTypeFilters}
-            contentTypeOptions={contentTypeOptions}
-            error={error}
-            filter={filter}
-            isCapturing={isCapturing}
-            methodFilters={methodFilters}
-            methodOptions={methodOptions}
-            onClear={() => setClearConfirmOpen(true)}
-            onContentTypesChange={setContentTypeFilters}
-            onFilterChange={setFilter}
-            onMethodsChange={setMethodFilters}
-            onToggleCapture={() => void toggleCapture()}
+	            contentTypeOptions={contentTypeOptions}
+	            error={error}
+	            filter={filter}
+	            interceptEditRequest={interceptSettings.editRequest}
+	            interceptEditResponse={interceptSettings.editResponse}
+	            isCapturing={isCapturing}
+	            methodFilters={methodFilters}
+	            methodOptions={methodOptions}
+	            onClear={() => setClearConfirmOpen(true)}
+	            onContentTypesChange={setContentTypeFilters}
+	            onFilterChange={setFilter}
+	            onInterceptEditRequestChange={(value) =>
+	              void updateInterceptSettings({ editRequest: value })
+	            }
+	            onInterceptEditResponseChange={(value) =>
+	              void updateInterceptSettings({ editResponse: value })
+	            }
+	            onMethodsChange={setMethodFilters}
+	            onToggleCapture={() => void toggleCapture()}
           />
 
           <div className="flex min-h-0 flex-1 flex-col bg-card">
-            <TrafficTable
-              certURL={certURL}
-              entries={visibleEntries}
-              methodClassNames={methodClassNames}
-              proxyDetails={proxyDetails}
-              selectedID={selectedID}
-              sort={sort}
-              onOpen={openEntry}
-              onPin={(entry) =>
-                setPinnedIDs((current) =>
-                  current.includes(entry.id) ? current : [entry.id, ...current],
-                )
-              }
-              onSort={sortBy}
-            />
+            {visibleEntries.length === 0 ? (
+              <div className="flex min-h-0 flex-1 items-center justify-center p-4">
+                <div className="grid justify-items-center gap-3 text-center">
+                  <div className="text-sm text-muted-foreground">
+                    No traffic captured. Setup may be needed.
+                  </div>
+                  <MobileSetupDialog
+                    certURL={certURL}
+                    proxyDetails={proxyDetails}
+                    trigger={
+                      <Button variant="outline" className="active:translate-y-px">
+                        <Smartphone className="size-4" />
+                        Setup
+                      </Button>
+                    }
+                  />
+                </div>
+              </div>
+            ) : (
+              <TrafficTable
+                entries={visibleEntries}
+                methodClassNames={methodClassNames}
+                selectedID={selectedID}
+                sort={sort}
+                onEditAndResend={editAndResend}
+                onOpen={openEntry}
+                onPin={(entry) =>
+                  setPinnedIDs((current) =>
+                    current.includes(entry.id)
+                      ? current
+                      : [entry.id, ...current],
+                  )
+                }
+                onSort={sortBy}
+              />
+            )}
 
             {bottomDetailsOpen ? (
               <RequestInfoPanel
-                entry={selectedEntry}
+                editMode={editMode}
+                entry={detailsEntry}
                 height={detailsHeight}
+                onChange={setEditedEntry}
                 onClose={() => setDetailsOpen(false)}
+                onContinue={
+                  editedEntry ? () => void continueEditedEntry() : undefined
+                }
                 onResizeStart={startDetailsResize}
               />
             ) : null}
@@ -597,10 +741,13 @@ export default function Homeview() {
 
         {rightDetailsOpen ? (
           <RequestInfoPanel
-            entry={selectedEntry}
+            editMode={editMode}
+            entry={detailsEntry}
             placement="right"
             width={rightPanelWidth}
+            onChange={setEditedEntry}
             onClose={() => setDetailsOpen(false)}
+            onContinue={editedEntry ? () => void continueEditedEntry() : undefined}
             onResizeStart={(event) => startSidePanelResize(event, "right")}
           />
         ) : null}
@@ -636,9 +783,60 @@ export default function Homeview() {
         onDelete={setDeleteProject}
         onNameChange={setNewProjectName}
         onOpenChange={setSessionsDialogOpen}
+        onRename={openRenameProject}
         onSave={saveNoProjectSession}
         onSelect={selectProject}
       />
+
+      <Dialog
+        open={Boolean(renameProject)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setRenameProject(null);
+            setRenameProjectName("");
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <form
+            className="grid gap-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              confirmRenameProject();
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>Rename session</DialogTitle>
+              <DialogDescription>
+                Enter a new name for {renameProject?.name ?? "this session"}.
+              </DialogDescription>
+            </DialogHeader>
+
+            <Input
+              value={renameProjectName}
+              onChange={(event) => setRenameProjectName(event.target.value)}
+              autoFocus
+              aria-label="Session name"
+            />
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setRenameProject(null);
+                  setRenameProjectName("");
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={!renameProjectName.trim()}>
+                Rename
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }

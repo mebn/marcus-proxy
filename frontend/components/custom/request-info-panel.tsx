@@ -6,14 +6,25 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { formatBytes, formatHeaders, type TrafficEntry } from "./proxy-data";
 
+export type RequestEditMode =
+  | "view"
+  | "edit-request"
+  | "edit-response"
+  | "resend-request";
+
 type RequestInfoPanelProps = {
+  editMode?: RequestEditMode;
   entry: TrafficEntry | null;
   height?: number;
   placement?: "bottom" | "right";
   width?: number;
+  onChange?: (entry: TrafficEntry) => void;
   onClose: () => void;
+  onContinue?: () => void;
   onResizeStart: (event: React.PointerEvent<HTMLElement>) => void;
 };
 
@@ -24,10 +35,13 @@ type DetailBlockProps = {
 };
 
 export function RequestInfoPanel({
+  editMode = "view",
   entry,
   height,
   placement = "bottom",
+  onChange,
   onClose,
+  onContinue,
   onResizeStart,
   width,
 }: RequestInfoPanelProps) {
@@ -35,8 +49,8 @@ export function RequestInfoPanel({
   return (
     <aside
       className={[
-        "relative flex shrink-0 flex-col bg-card text-card-foreground shadow-lg",
-        isBottom ? "w-full border-t" : "min-w-0 border-l",
+        "relative flex shrink-0 flex-col bg-card text-card-foreground",
+        isBottom ? "w-full border-t shadow-lg" : "min-w-0 border-l",
       ].join(" ")}
       style={isBottom ? { height } : { width }}
     >
@@ -47,20 +61,43 @@ export function RequestInfoPanel({
         ].join(" ")}
         onPointerDown={isBottom ? onResizeStart : undefined}
       >
-        <div className="min-w-0 truncate text-sm font-semibold">Request</div>
+        <div className="min-w-0">
+          <div className="truncate text-sm font-semibold">Request</div>
+          <div className="truncate text-xs text-muted-foreground">
+            {modeLabel(editMode, entry)}
+          </div>
+        </div>
 
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          onClick={onClose}
-          onPointerDown={(event) => event.stopPropagation()}
-          aria-label="Close request details"
-        >
-          <X className="size-3" />
-        </Button>
+        <div className="flex shrink-0 items-center gap-1">
+          {onContinue ? (
+            <Button
+              size="sm"
+              onClick={onContinue}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              {editMode === "resend-request" ? "Send" : "Continue"}
+            </Button>
+          ) : null}
+
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            onClick={onClose}
+            onPointerDown={(event) => event.stopPropagation()}
+            aria-label="Close request details"
+          >
+            <X className="size-3" />
+          </Button>
+        </div>
       </div>
+
       {entry ? (
-        <SelectedRequest entry={entry} placement={placement} />
+        <SelectedRequest
+          editMode={editMode}
+          entry={entry}
+          onChange={onChange}
+          placement={placement}
+        />
       ) : (
         <EmptyDetails />
       )}
@@ -76,13 +113,22 @@ export function RequestInfoPanel({
 }
 
 function SelectedRequest({
+  editMode,
   entry,
+  onChange,
   placement,
 }: {
+  editMode: RequestEditMode;
   entry: TrafficEntry;
+  onChange?: (entry: TrafficEntry) => void;
   placement: "bottom" | "right";
 }) {
-  const compactInfo = placement === "right";
+  const requestEditable =
+    editMode === "edit-request" || editMode === "resend-request";
+  const responseEditable = editMode === "edit-response";
+  const update = (patch: Partial<TrafficEntry>) =>
+    onChange?.({ ...entry, ...patch });
+
   return (
     <div
       className={[
@@ -94,40 +140,45 @@ function SelectedRequest({
     >
       <div className="grid min-w-0 content-start gap-2 text-sm">
         <DetailBlock title="Info" defaultOpen>
-          <div className="grid gap-2 p-2">
+          <div className="grid gap-1 p-2 text-xs">
+            {requestEditable || responseEditable ? (
+              <>
+                <InfoBox
+                  editable={requestEditable}
+                  label="Method"
+                  value={entry.isConnect ? "CONNECT" : entry.method || ""}
+                  onChange={(method) =>
+                    update({ method, isConnect: method === "CONNECT" })
+                  }
+                />
+                <InfoBox
+                  editable={responseEditable}
+                  label="Status"
+                  value={entry.status ? String(entry.status) : ""}
+                  onChange={(value) => update({ status: Number(value) || 0 })}
+                />
+              </>
+            ) : (
+              <InfoBox
+                label="Summary"
+                value={`${entry.isConnect ? "CONNECT" : entry.method} ${entry.status || "-"}`}
+              />
+            )}
             <InfoBox
-              compact={compactInfo}
-              label="Summary"
-              value={`${entry.isConnect ? "CONNECT" : entry.method} ${entry.status || "-"}`}
-            />
-            <InfoBox
-              compact={compactInfo}
+              editable={requestEditable}
               label="URL"
-              value={entry.url || "-"}
+              value={entry.url || ""}
+              onChange={(url) => update({ url })}
             />
             <InfoBox
-              compact={compactInfo}
+              editable={requestEditable}
               label="Host"
-              value={entry.host || "-"}
+              value={entry.host || ""}
+              onChange={(host) => update({ host })}
             />
-            <InfoBox
-              compact={compactInfo}
-              label="Client"
-              value={entry.client || "-"}
-            />
-
-            <div className="grid grid-cols-2 gap-2">
-              <InfoBox
-                compact={compactInfo}
-                label="Response"
-                value={formatBytes(entry.bytes)}
-              />
-              <InfoBox
-                compact={compactInfo}
-                label="Duration"
-                value={`${entry.durationMs} ms`}
-              />
-            </div>
+            <InfoBox label="Client" value={entry.client || "-"} />
+            <InfoBox label="Response" value={formatBytes(entry.bytes)} />
+            <InfoBox label="Duration" value={`${entry.durationMs} ms`} />
           </div>
         </DetailBlock>
 
@@ -140,23 +191,39 @@ function SelectedRequest({
         ) : null}
 
         <DetailBlock title="Request Headers" defaultOpen>
-          <DetailPre>{formatHeaders(entry.requestHeaders)}</DetailPre>
+          <DetailText
+            editable={requestEditable}
+            value={headersText(entry.requestHeaders)}
+            onChange={(value) =>
+              update({ requestHeaders: parseHeaders(value) })
+            }
+          />
         </DetailBlock>
 
         <DetailBlock title="Request Body">
-          <DetailPre>
-            {bodyText(entry.requestBody, entry.requestBodyTruncated)}
-          </DetailPre>
+          <DetailText
+            editable={requestEditable}
+            value={bodyText(entry.requestBody, entry.requestBodyTruncated)}
+            onChange={(requestBody) => update({ requestBody })}
+          />
         </DetailBlock>
 
         <DetailBlock title="Response Headers" defaultOpen>
-          <DetailPre>{formatHeaders(entry.responseHeaders)}</DetailPre>
+          <DetailText
+            editable={responseEditable}
+            value={headersText(entry.responseHeaders)}
+            onChange={(value) =>
+              update({ responseHeaders: parseHeaders(value) })
+            }
+          />
         </DetailBlock>
 
         <DetailBlock title="Response Body">
-          <DetailPre>
-            {bodyText(entry.responseBody, entry.responseBodyTruncated)}
-          </DetailPre>
+          <DetailText
+            editable={responseEditable}
+            value={bodyText(entry.responseBody, entry.responseBodyTruncated)}
+            onChange={(responseBody) => update({ responseBody })}
+          />
         </DetailBlock>
       </div>
     </div>
@@ -188,39 +255,92 @@ function DetailBlock({
   );
 }
 
-function DetailPre({ children }: { children: ReactNode }) {
+function DetailText({
+  editable,
+  onChange,
+  value,
+}: {
+  editable: boolean;
+  onChange: (value: string) => void;
+  value: string;
+}) {
+  if (editable) {
+    return (
+      <Textarea
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="max-h-44 min-h-24 resize-y rounded-none border-0 text-xs font-mono whitespace-pre"
+      />
+    );
+  }
+
   return (
     <pre className="max-h-44 max-w-full select-text overflow-auto p-3 text-xs whitespace-pre">
-      {children}
+      {value}
     </pre>
   );
 }
 
 function EmptyDetails() {
-  return (
-    <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-      Select request row to show body, headers, timing, and errors.
-    </div>
-  );
+  return <div></div>;
 }
 
 function InfoBox({
-  compact = false,
+  editable = false,
   label,
+  onChange,
   value,
 }: {
-  compact?: boolean;
+  editable?: boolean;
   label: string;
+  onChange?: (value: string) => void;
   value: string;
 }) {
   return (
-    <div className={compact ? "px-2 pt-1 pb-0" : "p-2"}>
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="break-all">{value}</div>
+    <div className="flex min-w-0 select-text gap-1 px-1 py-0.5 leading-snug">
+      <span className="shrink-0 text-muted-foreground">{label}:</span>
+      {editable ? (
+        <Input
+          value={value}
+          onChange={(event) => onChange?.(event.target.value)}
+          className="h-5 min-w-0 border-0 px-1 py-0 text-xs shadow-none"
+        />
+      ) : (
+        <span className="min-w-0 break-all">{value || "-"}</span>
+      )}
     </div>
   );
 }
 
 function bodyText(value: string | undefined, truncated: boolean) {
-  return `${value || "-"}${truncated ? "\n\n[truncated]" : ""}`;
+  return `${value || ""}${truncated ? "\n\n[truncated]" : ""}`;
+}
+
+function headersText(headers: Record<string, string[]> | undefined) {
+  if (!headers || Object.keys(headers).length === 0) return "";
+  return formatHeaders(headers);
+}
+
+function parseHeaders(value: string): Record<string, string[]> {
+  const headers: Record<string, string[]> = {};
+  for (const line of value.split("\n")) {
+    const index = line.indexOf(":");
+    if (index <= 0) continue;
+    const key = line.slice(0, index).trim();
+    const headerValue = line.slice(index + 1).trim();
+    if (!key) continue;
+    headers[key] = headerValue
+      ? headerValue.split(",").map((item) => item.trim())
+      : [""];
+  }
+  return headers;
+}
+
+function modeLabel(mode: RequestEditMode, entry: TrafficEntry | null) {
+  if (mode === "edit-request") return "Editing paused request";
+  if (mode === "edit-response") return "Editing paused response";
+  if (mode === "resend-request") return "Editing request to resend";
+  if (entry?.interceptPhase === "request") return "Viewing paused request";
+  if (entry?.interceptPhase === "response") return "Viewing paused response";
+  return "Viewing request and response";
 }
