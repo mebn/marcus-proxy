@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/custom/confirm-dialog";
 import {
@@ -33,17 +32,12 @@ import {
   type TrafficEntry,
 } from "@/components/custom/proxy-data";
 import {
-  RequestInfoPanel,
   type RequestEditMode,
 } from "@/components/custom/request-info-panel";
-import { MobileSetupDialog } from "@/components/custom/mobile-setup-dialog";
-import { RequestsPanel } from "@/components/custom/requests-panel";
-import {
-  RequestFilterBar,
-  RequestToolbar,
-} from "@/components/custom/request-toolbar";
+import { TopBar } from "@/components/custom/request-toolbar";
 import { SessionsDialog } from "@/components/custom/sessions-dialog";
-import { TrafficTable } from "@/components/custom/traffic-table";
+import { AgentView } from "./AgentView";
+import { NormalView } from "./NormalView";
 import {
   ContinueIntercept,
   GetProxyStatus,
@@ -89,6 +83,7 @@ export default function Homeview() {
   const [storageReady, setStorageReady] = useState(false);
   const [isDark, setIsDark] = useState(true);
   const [isCapturing, setIsCapturing] = useState(true);
+  const [agentMode, setAgentMode] = useState(false);
   const [interceptSettings, setInterceptSettings] =
     useState<InterceptSettings>({
       editRequest: false,
@@ -616,142 +611,106 @@ export default function Homeview() {
 
   return (
     <main className="flex h-screen w-screen max-w-screen select-none flex-col overflow-hidden bg-card text-card-foreground">
-      <RequestToolbar
-        activeSessionName={activeSessionName}
+      <TopBar
+        agentMode={agentMode}
         certURL={certURL}
         detailsOpen={bottomDetailsOpen}
         leftPanelOpen={leftPanelOpen}
         proxyDetails={proxyDetails}
         rightPanelOpen={rightDetailsOpen}
-        onDetailsToggle={() => {
-          setDetailsPlacement("bottom");
-          setDetailsOpen((current) =>
-            detailsPlacement === "bottom" ? !current : true,
-          );
-        }}
-        onLeftToggle={() => setLeftPanelOpen((current) => !current)}
-        onRightToggle={() => {
-          setDetailsPlacement("right");
-          setDetailsOpen((current) =>
-            detailsPlacement === "right" ? !current : true,
-          );
-        }}
+        title={`marcus-proxy · Session: ${activeSessionName}`}
+        onAgentModeChange={setAgentMode}
+        onDetailsToggle={
+          agentMode
+            ? undefined
+            : () => {
+                setDetailsPlacement("bottom");
+                setDetailsOpen((current) =>
+                  detailsPlacement === "bottom" ? !current : true,
+                );
+              }
+        }
+        onLeftToggle={
+          agentMode ? undefined : () => setLeftPanelOpen((current) => !current)
+        }
+        onRightToggle={
+          agentMode
+            ? undefined
+            : () => {
+                setDetailsPlacement("right");
+                setDetailsOpen((current) =>
+                  detailsPlacement === "right" ? !current : true,
+                );
+              }
+        }
         onSessionsOpen={() => setSessionsDialogOpen(true)}
       />
 
-      <section className="flex min-h-0 w-full flex-1 bg-card">
-        {leftPanelOpen ? (
-          <RequestsPanel
-            entriesCount={projectEntries.length}
-            hostFilter={hostFilter}
-            hostStats={hostStats}
-            pinnedEntries={pinnedEntries}
-            selectedID={selectedID}
-            side="left"
-            width={leftPanelWidth}
-            onClose={() => setLeftPanelOpen(false)}
-            onHostFilter={setHostFilter}
-            onOpen={openEntry}
-            onResizeStart={(event) => startSidePanelResize(event, "left")}
-            onUnpin={(id) =>
-              setPinnedIDs((current) =>
-                current.filter((entryID) => entryID !== id),
-              )
-            }
-          />
-        ) : null}
-
-        <div className="flex min-w-0 flex-1 flex-col">
-          <RequestFilterBar
-            contentTypeFilters={contentTypeFilters}
-	            contentTypeOptions={contentTypeOptions}
-	            error={error}
-	            filter={filter}
-	            interceptEditRequest={interceptSettings.editRequest}
-	            interceptEditResponse={interceptSettings.editResponse}
-	            isCapturing={isCapturing}
-	            methodFilters={methodFilters}
-	            methodOptions={methodOptions}
-	            onClear={() => setClearConfirmOpen(true)}
-	            onContentTypesChange={setContentTypeFilters}
-	            onFilterChange={setFilter}
-	            onInterceptEditRequestChange={(value) =>
-	              void updateInterceptSettings({ editRequest: value })
-	            }
-	            onInterceptEditResponseChange={(value) =>
-	              void updateInterceptSettings({ editResponse: value })
-	            }
-	            onMethodsChange={setMethodFilters}
-	            onToggleCapture={() => void toggleCapture()}
-          />
-
-          <div className="flex min-h-0 flex-1 flex-col bg-card">
-            {visibleEntries.length === 0 ? (
-              <div className="flex min-h-0 flex-1 items-center justify-center p-4">
-                <div className="grid justify-items-center gap-3 text-center">
-                  <div className="text-sm text-muted-foreground">
-                    No traffic captured. Setup may be needed.
-                  </div>
-                  <MobileSetupDialog
-                    certURL={certURL}
-                    proxyDetails={proxyDetails}
-                    trigger={
-                      <Button variant="outline" className="active:translate-y-px">
-                        <Smartphone className="size-4" />
-                        Setup
-                      </Button>
-                    }
-                  />
-                </div>
-              </div>
-            ) : (
-              <TrafficTable
-                entries={visibleEntries}
-                methodClassNames={methodClassNames}
-                selectedID={selectedID}
-                sort={sort}
-                onEditAndResend={editAndResend}
-                onOpen={openEntry}
-                onPin={(entry) =>
-                  setPinnedIDs((current) =>
-                    current.includes(entry.id)
-                      ? current
-                      : [entry.id, ...current],
-                  )
-                }
-                onSort={sortBy}
-              />
-            )}
-
-            {bottomDetailsOpen ? (
-              <RequestInfoPanel
-                editMode={editMode}
-                entry={detailsEntry}
-                height={detailsHeight}
-                onChange={setEditedEntry}
-                onClose={() => setDetailsOpen(false)}
-                onContinue={
-                  editedEntry ? () => void continueEditedEntry() : undefined
-                }
-                onResizeStart={startDetailsResize}
-              />
-            ) : null}
-          </div>
-        </div>
-
-        {rightDetailsOpen ? (
-          <RequestInfoPanel
-            editMode={editMode}
-            entry={detailsEntry}
-            placement="right"
-            width={rightPanelWidth}
-            onChange={setEditedEntry}
-            onClose={() => setDetailsOpen(false)}
-            onContinue={editedEntry ? () => void continueEditedEntry() : undefined}
-            onResizeStart={(event) => startSidePanelResize(event, "right")}
-          />
-        ) : null}
-      </section>
+      {agentMode ? (
+        <AgentView />
+      ) : (
+        <NormalView
+          bottomDetailsOpen={bottomDetailsOpen}
+          certURL={certURL}
+          contentTypeFilters={contentTypeFilters}
+          contentTypeOptions={contentTypeOptions}
+          detailsEntry={detailsEntry}
+          detailsHeight={detailsHeight}
+          editMode={editMode}
+          editedEntry={editedEntry}
+          error={error}
+          filter={filter}
+          hostFilter={hostFilter}
+          hostStats={hostStats}
+          interceptSettings={interceptSettings}
+          isCapturing={isCapturing}
+          leftPanelOpen={leftPanelOpen}
+          leftPanelWidth={leftPanelWidth}
+          methodClassNames={methodClassNames}
+          methodFilters={methodFilters}
+          methodOptions={methodOptions}
+          pinnedEntries={pinnedEntries}
+          projectEntriesCount={projectEntries.length}
+          proxyDetails={proxyDetails}
+          rightDetailsOpen={rightDetailsOpen}
+          rightPanelWidth={rightPanelWidth}
+          selectedID={selectedID}
+          sort={sort}
+          visibleEntries={visibleEntries}
+          onClear={() => setClearConfirmOpen(true)}
+          onCloseDetails={() => setDetailsOpen(false)}
+          onCloseLeftPanel={() => setLeftPanelOpen(false)}
+          onContentTypesChange={setContentTypeFilters}
+          onContinueEditedEntry={continueEditedEntry}
+          onDetailsResizeStart={startDetailsResize}
+          onEditAndResend={editAndResend}
+          onEditedEntryChange={setEditedEntry}
+          onFilterChange={setFilter}
+          onHostFilter={setHostFilter}
+          onInterceptEditRequestChange={(value) =>
+            void updateInterceptSettings({ editRequest: value })
+          }
+          onInterceptEditResponseChange={(value) =>
+            void updateInterceptSettings({ editResponse: value })
+          }
+          onLeftResizeStart={(event) => startSidePanelResize(event, "left")}
+          onMethodsChange={setMethodFilters}
+          onOpenEntry={openEntry}
+          onPin={(entry) =>
+            setPinnedIDs((current) =>
+              current.includes(entry.id) ? current : [entry.id, ...current],
+            )
+          }
+          onRightResizeStart={(event) => startSidePanelResize(event, "right")}
+          onSort={sortBy}
+          onToggleCapture={() => void toggleCapture()}
+          onUnpin={(id) =>
+            setPinnedIDs((current) =>
+              current.filter((entryID) => entryID !== id),
+            )
+          }
+        />
+      )}
 
       <ConfirmDialog
         open={Boolean(deleteProject)}

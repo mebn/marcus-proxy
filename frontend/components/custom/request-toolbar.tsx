@@ -16,6 +16,7 @@ import {
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { WindowToggleMaximise } from "@/wailsjs/runtime/runtime";
 import { MobileSetupDialog } from "./mobile-setup-dialog";
@@ -23,14 +24,31 @@ import type { ProxyDetails } from "./proxy-data";
 
 type RequestToolbarProps = {
   activeSessionName: string;
+  agentMode: boolean;
   certURL: string;
   detailsOpen: boolean;
   leftPanelOpen: boolean;
   proxyDetails: ProxyDetails;
   rightPanelOpen: boolean;
+  onAgentModeChange: (enabled: boolean) => void;
   onDetailsToggle: () => void;
   onLeftToggle: () => void;
   onRightToggle: () => void;
+  onSessionsOpen: () => void;
+};
+
+type TopBarProps = {
+  agentMode: boolean;
+  certURL: string;
+  detailsOpen?: boolean;
+  leftPanelOpen?: boolean;
+  proxyDetails: ProxyDetails;
+  rightPanelOpen?: boolean;
+  title: string;
+  onAgentModeChange: (enabled: boolean) => void;
+  onDetailsToggle?: () => void;
+  onLeftToggle?: () => void;
+  onRightToggle?: () => void;
   onSessionsOpen: () => void;
 };
 
@@ -62,16 +80,52 @@ type FilterGroupProps = {
 
 export function RequestToolbar({
   activeSessionName,
+  agentMode,
   certURL,
   detailsOpen,
   leftPanelOpen,
   proxyDetails,
   rightPanelOpen,
+  onAgentModeChange,
   onDetailsToggle,
   onLeftToggle,
   onRightToggle,
   onSessionsOpen,
 }: RequestToolbarProps) {
+  return (
+    <TopBar
+      agentMode={agentMode}
+      certURL={certURL}
+      detailsOpen={detailsOpen}
+      leftPanelOpen={leftPanelOpen}
+      proxyDetails={proxyDetails}
+      rightPanelOpen={rightPanelOpen}
+      title={`marcus-proxy · Session: ${activeSessionName}`}
+      onAgentModeChange={onAgentModeChange}
+      onDetailsToggle={onDetailsToggle}
+      onLeftToggle={onLeftToggle}
+      onRightToggle={onRightToggle}
+      onSessionsOpen={onSessionsOpen}
+    />
+  );
+}
+
+export function TopBar({
+  agentMode,
+  certURL,
+  detailsOpen = false,
+  leftPanelOpen = false,
+  proxyDetails,
+  rightPanelOpen = false,
+  title,
+  onAgentModeChange,
+  onDetailsToggle,
+  onLeftToggle,
+  onRightToggle,
+  onSessionsOpen,
+}: TopBarProps) {
+  const showPanelControls = onLeftToggle && onDetailsToggle && onRightToggle;
+
   return (
     <div className="flex h-12 shrink-0 items-center gap-3 bg-muted/60 px-3">
       <div
@@ -80,9 +134,7 @@ export function RequestToolbar({
       >
         <div className="w-20 shrink-0" />
 
-        <div className="min-w-0 truncate text-sm font-semibold">
-          marcus-proxy · Session: {activeSessionName}
-        </div>
+        <div className="min-w-0 truncate text-sm font-semibold">{title}</div>
       </div>
 
       <div
@@ -116,34 +168,45 @@ export function RequestToolbar({
           Sessions
         </Button>
 
-        <div className="flex items-center gap-1">
-          <PanelButton
-            active={leftPanelOpen}
-            activeLabel="Close left panel"
-            inactiveLabel="Open left panel"
-            onClick={onLeftToggle}
-            activeIcon={<PanelLeftClose className="size-4" />}
-            inactiveIcon={<PanelLeftOpen className="size-4" />}
+        <label className="flex h-8 items-center gap-2 px-1 text-xs">
+          <Switch
+            checked={agentMode}
+            onCheckedChange={onAgentModeChange}
+            aria-label="Agent mode"
           />
+          Agent mode
+        </label>
 
-          <PanelButton
-            active={detailsOpen}
-            activeLabel="Close bottom panel"
-            inactiveLabel="Open bottom panel"
-            onClick={onDetailsToggle}
-            activeIcon={<PanelBottomClose className="size-4" />}
-            inactiveIcon={<PanelBottomOpen className="size-4" />}
-          />
+        {showPanelControls ? (
+          <div className="flex items-center gap-1">
+            <PanelButton
+              active={leftPanelOpen}
+              activeLabel="Close left panel"
+              inactiveLabel="Open left panel"
+              onClick={onLeftToggle}
+              activeIcon={<PanelLeftClose className="size-4" />}
+              inactiveIcon={<PanelLeftOpen className="size-4" />}
+            />
 
-          <PanelButton
-            active={rightPanelOpen}
-            activeLabel="Close right panel"
-            inactiveLabel="Open right panel"
-            onClick={onRightToggle}
-            activeIcon={<PanelRightClose className="size-4" />}
-            inactiveIcon={<PanelRightOpen className="size-4" />}
-          />
-        </div>
+            <PanelButton
+              active={detailsOpen}
+              activeLabel="Close bottom panel"
+              inactiveLabel="Open bottom panel"
+              onClick={onDetailsToggle}
+              activeIcon={<PanelBottomClose className="size-4" />}
+              inactiveIcon={<PanelBottomOpen className="size-4" />}
+            />
+
+            <PanelButton
+              active={rightPanelOpen}
+              activeLabel="Close right panel"
+              inactiveLabel="Open right panel"
+              onClick={onRightToggle}
+              activeIcon={<PanelRightClose className="size-4" />}
+              inactiveIcon={<PanelRightOpen className="size-4" />}
+            />
+          </div>
+        ) : null}
       </div>
     </div>
   );
