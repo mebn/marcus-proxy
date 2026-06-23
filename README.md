@@ -1,6 +1,6 @@
 # Marcus Proxy
 
-A forward proxy for capturing, inspecting, and analyzing API traffic from mobile apps. Built with Go, TypeScript, and Wails.
+A forward proxy for capturing API traffic from mobile apps. Built with Go, TypeScript, and Wails.
 
 <p align="center">
   <img src="images/homeview3.png" width="1000">
