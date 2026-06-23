@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ChevronDown, X } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Panel, usePanelShortcut } from "./panel";
 import { formatBytes, formatHeaders, type TrafficEntry } from "./proxy-data";
 
 export type RequestEditMode =
@@ -20,12 +21,15 @@ type RequestInfoPanelProps = {
   editMode?: RequestEditMode;
   entry: TrafficEntry | null;
   height?: number;
+  open: boolean;
   placement?: "bottom" | "right";
   width?: number;
+  active?: boolean;
   onChange?: (entry: TrafficEntry) => void;
-  onClose: () => void;
+  onActivate?: () => void;
   onContinue?: () => void;
-  onResizeStart: (event: React.PointerEvent<HTMLElement>) => void;
+  onOpenChange: (open: boolean) => void;
+  onSizeChange: (size: number) => void;
 };
 
 type DetailBlockProps = {
@@ -38,59 +42,48 @@ export function RequestInfoPanel({
   editMode = "view",
   entry,
   height,
+  open,
   placement = "bottom",
+  active = true,
   onChange,
-  onClose,
+  onActivate,
   onContinue,
-  onResizeStart,
+  onOpenChange,
+  onSizeChange,
   width,
 }: RequestInfoPanelProps) {
-  const isBottom = placement === "bottom";
+  usePanelShortcut({
+    active,
+    key: placement === "bottom" ? "b" : "r",
+    open,
+    onActivate,
+    onOpenChange,
+  });
+
+  if (!open || !active) return null;
+
   return (
-    <aside
-      className={[
-        "relative flex shrink-0 flex-col bg-card text-card-foreground",
-        isBottom ? "w-full border-t shadow-lg" : "min-w-0 border-l",
-      ].join(" ")}
-      style={isBottom ? { height } : { width }}
-    >
-      <div
-        className={[
-          "flex items-center justify-between gap-2 p-3",
-          isBottom ? "cursor-row-resize" : "",
-        ].join(" ")}
-        onPointerDown={isBottom ? onResizeStart : undefined}
-      >
-        <div className="min-w-0">
-          <div className="truncate text-sm font-semibold">Request</div>
-          <div className="truncate text-xs text-muted-foreground">
-            {modeLabel(editMode, entry)}
-          </div>
-        </div>
-
-        <div className="flex shrink-0 items-center gap-1">
-          {onContinue ? (
-            <Button
-              size="sm"
-              onClick={onContinue}
-              onPointerDown={(event) => event.stopPropagation()}
-            >
-              {editMode === "resend-request" ? "Send" : "Continue"}
-            </Button>
-          ) : null}
-
+    <Panel
+      actions={
+        onContinue ? (
           <Button
-            variant="ghost"
-            size="icon-xs"
-            onClick={onClose}
+            size="sm"
+            onClick={onContinue}
             onPointerDown={(event) => event.stopPropagation()}
-            aria-label="Close request details"
           >
-            <X className="size-3" />
+            {editMode === "resend-request" ? "Send" : "Continue"}
           </Button>
-        </div>
-      </div>
-
+        ) : null
+      }
+      closeLabel="Close request details"
+      height={height}
+      placement={placement}
+      subtitle={modeLabel(editMode, entry)}
+      title="Request"
+      width={width}
+      onClose={() => onOpenChange(false)}
+      onSizeChange={onSizeChange}
+    >
       {entry ? (
         <SelectedRequest
           editMode={editMode}
@@ -101,14 +94,7 @@ export function RequestInfoPanel({
       ) : (
         <EmptyDetails />
       )}
-
-      {!isBottom ? (
-        <div
-          className="absolute top-0 left-[-3px] z-20 h-full w-1.5 cursor-col-resize"
-          onPointerDown={onResizeStart}
-        />
-      ) : null}
-    </aside>
+    </Panel>
   );
 }
 

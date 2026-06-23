@@ -1,5 +1,6 @@
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Panel, usePanelShortcut } from "./panel";
 import type { HostStat, TrafficEntry } from "./proxy-data";
 
 type RequestsPanelProps = {
@@ -8,12 +9,13 @@ type RequestsPanelProps = {
   hostStats: HostStat[];
   pinnedEntries: TrafficEntry[];
   selectedID: number | null;
+  open: boolean;
   side?: "left" | "right";
   width: number;
-  onClose: () => void;
   onHostFilter: (host: string | null) => void;
+  onOpenChange: (open: boolean) => void;
   onOpen: (entry: TrafficEntry) => void;
-  onResizeStart: (event: React.PointerEvent<HTMLElement>) => void;
+  onWidthChange: (width: number) => void;
   onUnpin: (id: number) => void;
 };
 
@@ -42,26 +44,34 @@ export function RequestsPanel({
   entriesCount,
   hostFilter,
   hostStats,
+  open,
   pinnedEntries,
   side = "right",
   selectedID,
   width,
-  onClose,
   onHostFilter,
+  onOpenChange,
   onOpen,
-  onResizeStart,
+  onWidthChange,
   onUnpin,
 }: RequestsPanelProps) {
-  return (
-    <aside
-      className={[
-        "relative flex min-w-0 shrink-0 flex-col bg-card",
-        side === "left" ? "border-r" : "border-l",
-      ].join(" ")}
-      style={{ width }}
-    >
-      <PanelHeader title="Requests" side={side} onClose={onClose} />
+  usePanelShortcut({
+    key: side === "left" ? "l" : "r",
+    open,
+    onOpenChange,
+  });
 
+  if (!open) return null;
+
+  return (
+    <Panel
+      closeLabel={side === "left" ? "Close left panel" : "Close right panel"}
+      placement={side}
+      title="Requests"
+      width={width}
+      onClose={() => onOpenChange(false)}
+      onSizeChange={onWidthChange}
+    >
       <PinnedRequests
         entries={pinnedEntries}
         selectedID={selectedID}
@@ -75,14 +85,7 @@ export function RequestsPanel({
         hostStats={hostStats}
         onHostFilter={onHostFilter}
       />
-      <div
-        className={[
-          "absolute top-0 z-20 h-full w-1.5 cursor-col-resize",
-          side === "left" ? "right-[-3px]" : "left-[-3px]",
-        ].join(" ")}
-        onPointerDown={onResizeStart}
-      />
-    </aside>
+    </Panel>
   );
 }
 
@@ -192,29 +195,5 @@ function HostButton({ active, count, label, onClick }: HostButtonProps) {
       <span className="min-w-0 truncate">{label}</span>
       <span className="shrink-0 text-xs text-muted-foreground">{count}</span>
     </Button>
-  );
-}
-
-function PanelHeader({
-  onClose,
-  side,
-  title,
-}: {
-  onClose: () => void;
-  side: "left" | "right";
-  title: string;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-2 p-3">
-      <div className="min-w-0 truncate text-sm font-semibold">{title}</div>
-      <Button
-        variant="ghost"
-        size="icon-xs"
-        onClick={onClose}
-        aria-label={side === "left" ? "Close left panel" : "Close right panel"}
-      >
-        <X className="size-3" />
-      </Button>
-    </div>
   );
 }

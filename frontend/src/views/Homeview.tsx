@@ -1,48 +1,43 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Smartphone } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/custom/confirm-dialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { DeleteProjectDialog } from "@/components/custom/delete-project-dialog";
+import { EmptyTrafficState } from "@/components/custom/empty-traffic-state";
 import {
   defaultProject,
   defaultProjectID,
   emptyStatus,
+  assignDefaultRequests,
+  buildHostStats,
+  countProjects,
+  filterAndSortEntries,
   getContentTypes,
   getMethodType,
-  getSearchText,
-  getSortValue,
   methodPillClassNames,
+  normalizeProject,
   normalizeContentType,
   normalizeStatus,
-  type HostStat,
+  numberKeyMap,
+  parseProxyDetails,
+  projectIDFor,
+  sortedUnique,
+  stringKeyMap,
   type InterceptSettings,
   type Project,
-  type ProxyDetails,
   type ProxyStatus,
   type SortDirection,
   type SortKey,
   type SortState,
   type TrafficEntry,
 } from "@/components/custom/proxy-data";
+import { RenameProjectDialog } from "@/components/custom/rename-project-dialog";
 import {
   RequestInfoPanel,
   type RequestEditMode,
 } from "@/components/custom/request-info-panel";
-import { MobileSetupDialog } from "@/components/custom/mobile-setup-dialog";
 import { RequestsPanel } from "@/components/custom/requests-panel";
-import {
-  RequestFilterBar,
-  RequestToolbar,
-} from "@/components/custom/request-toolbar";
+import { RequestFilterBar } from "@/components/custom/request-toolbar";
 import { SessionsDialog } from "@/components/custom/sessions-dialog";
+import { TopBar } from "@/components/custom/top-bar";
 import { TrafficTable } from "@/components/custom/traffic-table";
 import {
   ContinueIntercept,
@@ -81,7 +76,6 @@ export default function Homeview() {
   const [newProjectName, setNewProjectName] = useState("");
   const [deleteProject, setDeleteProject] = useState<Project | null>(null);
   const [renameProject, setRenameProject] = useState<Project | null>(null);
-  const [renameProjectName, setRenameProjectName] = useState("");
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [requestProjectIDs, setRequestProjectIDs] = useState<
     Record<number, string>
@@ -89,11 +83,12 @@ export default function Homeview() {
   const [storageReady, setStorageReady] = useState(false);
   const [isDark, setIsDark] = useState(true);
   const [isCapturing, setIsCapturing] = useState(true);
-  const [interceptSettings, setInterceptSettings] =
-    useState<InterceptSettings>({
+  const [interceptSettings, setInterceptSettings] = useState<InterceptSettings>(
+    {
       editRequest: false,
       editResponse: false,
-    });
+    },
+  );
   const [editedEntry, setEditedEntry] = useState<TrafficEntry | null>(null);
   const [editMode, setEditMode] = useState<RequestEditMode>("view");
 
@@ -101,11 +96,8 @@ export default function Homeview() {
   const activeProjectIDRef = useRef(activeProjectID);
   const interceptSettingsRef = useRef(interceptSettings);
 
-  const proxyURL = useMemo(
-    () => status.lanUrls[0] ?? status.address,
-    [status.address, status.lanUrls],
-  );
-  const certURL = useMemo(() => status.certUrls[0] ?? "", [status.certUrls]);
+  const proxyURL = status.lanUrls[0] ?? status.address;
+  const certURL = status.certUrls[0] ?? "";
   const selectedEntry = useMemo(
     () => status.recent.find((entry) => entry.id === selectedID) ?? null,
     [selectedID, status.recent],
@@ -177,12 +169,9 @@ export default function Homeview() {
     ],
   );
   const proxyDetails = useMemo(() => parseProxyDetails(proxyURL), [proxyURL]);
-  const activeSessionName = useMemo(
-    () =>
-      projects.find((project) => project.id === activeProjectID)?.name ??
-      "Unknown",
-    [activeProjectID, projects],
-  );
+  const activeSessionName =
+    projects.find((project) => project.id === activeProjectID)?.name ??
+    "Unknown";
   const bottomDetailsOpen = detailsOpen && detailsPlacement === "bottom";
   const rightDetailsOpen = detailsOpen && detailsPlacement === "right";
 
@@ -270,48 +259,11 @@ export default function Homeview() {
     setSelectedID(null);
   }
 
-  function confirmDeleteProject() {
-    if (!deleteProject) return;
-    const projectID = deleteProject.id;
-    setStatus((current) => ({
-      ...current,
-      recent: current.recent.filter(
-        (entry) => projectIDFor(entry.id, requestProjectIDs) !== projectID,
-      ),
-    }));
-    setRequestProjectIDs((current) =>
-      removeProjectRequests(current, projectID),
+  function toggleDetailsPanel(placement: RequestInfoPanelPlacement) {
+    setDetailsPlacement(placement);
+    setDetailsOpen((current) =>
+      detailsPlacement === placement ? !current : true,
     );
-    setPinnedIDs((current) =>
-      current.filter((id) => projectIDFor(id, requestProjectIDs) !== projectID),
-    );
-    if (projectID !== defaultProjectID)
-      setProjects((current) =>
-        current.filter((project) => project.id !== projectID),
-      );
-    if (activeProjectID === projectID) setActiveProjectID(defaultProjectID);
-    setHostFilter(null);
-    setSelectedID(null);
-    setDeleteProject(null);
-  }
-
-  function openRenameProject(project: Project) {
-    if (project.id === defaultProjectID) return;
-    setRenameProject(project);
-    setRenameProjectName(project.name);
-  }
-
-  function confirmRenameProject() {
-    if (!renameProject || renameProject.id === defaultProjectID) return;
-    const name = renameProjectName.trim();
-    if (!name) return;
-    setProjects((current) =>
-      current.map((project) =>
-        project.id === renameProject.id ? { ...project, name } : project,
-      ),
-    );
-    setRenameProject(null);
-    setRenameProjectName("");
   }
 
   function sortBy(key: SortKey) {
@@ -360,60 +312,6 @@ export default function Homeview() {
     setEditMode("view");
   }
 
-  function startDetailsResize(event: React.PointerEvent<HTMLElement>) {
-    event.preventDefault();
-    event.stopPropagation();
-
-    const startY = event.clientY;
-    const startHeight = detailsHeight;
-    const maxHeight = Math.max(220, window.innerHeight - 140);
-    const previousUserSelect = document.body.style.userSelect;
-    document.body.style.userSelect = "none";
-    const onPointerMove = (moveEvent: PointerEvent) => {
-      moveEvent.preventDefault();
-      const nextHeight = startHeight + startY - moveEvent.clientY;
-      setDetailsHeight(Math.min(maxHeight, Math.max(180, nextHeight)));
-    };
-    const onPointerUp = () => {
-      document.body.style.userSelect = previousUserSelect;
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
-    };
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp);
-  }
-
-  function startSidePanelResize(
-    event: React.PointerEvent<HTMLElement>,
-    side: "left" | "right",
-  ) {
-    event.preventDefault();
-    event.stopPropagation();
-
-    const startX = event.clientX;
-    const startWidth = side === "left" ? leftPanelWidth : rightPanelWidth;
-    const maxWidth = Math.max(240, Math.floor(window.innerWidth * 0.45));
-    const previousUserSelect = document.body.style.userSelect;
-    document.body.style.userSelect = "none";
-    const onPointerMove = (moveEvent: PointerEvent) => {
-      moveEvent.preventDefault();
-      const delta =
-        side === "left"
-          ? moveEvent.clientX - startX
-          : startX - moveEvent.clientX;
-      const width = Math.min(maxWidth, Math.max(160, startWidth + delta));
-      if (side === "left") setLeftPanelWidth(width);
-      if (side === "right") setRightPanelWidth(width);
-    };
-    const onPointerUp = () => {
-      document.body.style.userSelect = previousUserSelect;
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
-    };
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp);
-  }
-
   useEffect(() => {
     async function loadStoredState() {
       try {
@@ -453,7 +351,9 @@ export default function Homeview() {
         setSelectedID(entry.id);
         setEditedEntry(entry);
         setEditMode(
-          entry.interceptPhase === "response" ? "edit-response" : "edit-request",
+          entry.interceptPhase === "response"
+            ? "edit-response"
+            : "edit-request",
         );
         setDetailsOpen(true);
       }),
@@ -462,15 +362,9 @@ export default function Homeview() {
 
   useEffect(() => {
     isCapturingRef.current = isCapturing;
-  }, [isCapturing]);
-
-  useEffect(() => {
     activeProjectIDRef.current = activeProjectID;
-  }, [activeProjectID]);
-
-  useEffect(() => {
     interceptSettingsRef.current = interceptSettings;
-  }, [interceptSettings]);
+  }, [activeProjectID, interceptSettings, isCapturing]);
 
   useEffect(() => {
     if (!storageReady) return;
@@ -525,30 +419,6 @@ export default function Homeview() {
   useEffect(() => {
     document.documentElement.classList.toggle("dark", isDark);
   }, [isDark]);
-
-  useEffect(() => {
-    const openPanelShortcut = (event: KeyboardEvent) => {
-      if (!event.metaKey || event.shiftKey || event.altKey || event.ctrlKey)
-        return;
-      const key = event.key.toLowerCase();
-      if (key === "l") setLeftPanelOpen((current) => !current);
-      if (key === "r") {
-        setDetailsPlacement("right");
-        setDetailsOpen((current) =>
-          detailsPlacement === "right" ? !current : true,
-        );
-      }
-      if (key === "b") {
-        setDetailsPlacement("bottom");
-        setDetailsOpen((current) =>
-          detailsPlacement === "bottom" ? !current : true,
-        );
-      }
-      if (["l", "r", "b"].includes(key)) event.preventDefault();
-    };
-    window.addEventListener("keydown", openPanelShortcut);
-    return () => window.removeEventListener("keydown", openPanelShortcut);
-  }, [detailsPlacement]);
 
   function applySavedState(savedState: SavedAppState) {
     const ui = savedState.ui;
@@ -616,94 +486,70 @@ export default function Homeview() {
 
   return (
     <main className="flex h-screen w-screen max-w-screen select-none flex-col overflow-hidden bg-card text-card-foreground">
-      <RequestToolbar
+      <TopBar
         activeSessionName={activeSessionName}
         certURL={certURL}
         detailsOpen={bottomDetailsOpen}
         leftPanelOpen={leftPanelOpen}
         proxyDetails={proxyDetails}
         rightPanelOpen={rightDetailsOpen}
-        onDetailsToggle={() => {
-          setDetailsPlacement("bottom");
-          setDetailsOpen((current) =>
-            detailsPlacement === "bottom" ? !current : true,
-          );
-        }}
+        onDetailsToggle={() => toggleDetailsPanel("bottom")}
         onLeftToggle={() => setLeftPanelOpen((current) => !current)}
-        onRightToggle={() => {
-          setDetailsPlacement("right");
-          setDetailsOpen((current) =>
-            detailsPlacement === "right" ? !current : true,
-          );
-        }}
+        onRightToggle={() => toggleDetailsPanel("right")}
         onSessionsOpen={() => setSessionsDialogOpen(true)}
       />
 
       <section className="flex min-h-0 w-full flex-1 bg-card">
-        {leftPanelOpen ? (
-          <RequestsPanel
-            entriesCount={projectEntries.length}
-            hostFilter={hostFilter}
-            hostStats={hostStats}
-            pinnedEntries={pinnedEntries}
-            selectedID={selectedID}
-            side="left"
-            width={leftPanelWidth}
-            onClose={() => setLeftPanelOpen(false)}
-            onHostFilter={setHostFilter}
-            onOpen={openEntry}
-            onResizeStart={(event) => startSidePanelResize(event, "left")}
-            onUnpin={(id) =>
-              setPinnedIDs((current) =>
-                current.filter((entryID) => entryID !== id),
-              )
-            }
-          />
-        ) : null}
+        <RequestsPanel
+          entriesCount={projectEntries.length}
+          hostFilter={hostFilter}
+          hostStats={hostStats}
+          open={leftPanelOpen}
+          pinnedEntries={pinnedEntries}
+          selectedID={selectedID}
+          side="left"
+          width={leftPanelWidth}
+          onHostFilter={setHostFilter}
+          onOpen={openEntry}
+          onOpenChange={setLeftPanelOpen}
+          onWidthChange={setLeftPanelWidth}
+          onUnpin={(id) =>
+            setPinnedIDs((current) =>
+              current.filter((entryID) => entryID !== id),
+            )
+          }
+        />
 
         <div className="flex min-w-0 flex-1 flex-col">
           <RequestFilterBar
             contentTypeFilters={contentTypeFilters}
-	            contentTypeOptions={contentTypeOptions}
-	            error={error}
-	            filter={filter}
-	            interceptEditRequest={interceptSettings.editRequest}
-	            interceptEditResponse={interceptSettings.editResponse}
-	            isCapturing={isCapturing}
-	            methodFilters={methodFilters}
-	            methodOptions={methodOptions}
-	            onClear={() => setClearConfirmOpen(true)}
-	            onContentTypesChange={setContentTypeFilters}
-	            onFilterChange={setFilter}
-	            onInterceptEditRequestChange={(value) =>
-	              void updateInterceptSettings({ editRequest: value })
-	            }
-	            onInterceptEditResponseChange={(value) =>
-	              void updateInterceptSettings({ editResponse: value })
-	            }
-	            onMethodsChange={setMethodFilters}
-	            onToggleCapture={() => void toggleCapture()}
+            contentTypeOptions={contentTypeOptions}
+            error={error}
+            filter={filter}
+            interceptEditRequest={interceptSettings.editRequest}
+            interceptEditResponse={interceptSettings.editResponse}
+            isCapturing={isCapturing}
+            methodFilters={methodFilters}
+            methodOptions={methodOptions}
+            onClear={() => setClearConfirmOpen(true)}
+            onContentTypesChange={setContentTypeFilters}
+            onFilterChange={setFilter}
+            onInterceptEditRequestChange={(value) =>
+              void updateInterceptSettings({ editRequest: value })
+            }
+            onInterceptEditResponseChange={(value) =>
+              void updateInterceptSettings({ editResponse: value })
+            }
+            onMethodsChange={setMethodFilters}
+            onToggleCapture={() => void toggleCapture()}
           />
 
           <div className="flex min-h-0 flex-1 flex-col bg-card">
             {visibleEntries.length === 0 ? (
-              <div className="flex min-h-0 flex-1 items-center justify-center p-4">
-                <div className="grid justify-items-center gap-3 text-center">
-                  <div className="text-sm text-muted-foreground">
-                    No traffic captured. Setup may be needed.
-                  </div>
-                  <MobileSetupDialog
-                    certURL={certURL}
-                    proxyDetails={proxyDetails}
-                    trigger={
-                      <Button variant="outline" className="active:translate-y-px">
-                        <Smartphone className="size-4" />
-                        Setup
-                      </Button>
-                    }
-                  />
-                </div>
-              </div>
+              <EmptyTrafficState
+                certURL={certURL}
+                proxyDetails={proxyDetails}
+              />
             ) : (
               <TrafficTable
                 entries={visibleEntries}
@@ -723,44 +569,52 @@ export default function Homeview() {
               />
             )}
 
-            {bottomDetailsOpen ? (
-              <RequestInfoPanel
-                editMode={editMode}
-                entry={detailsEntry}
-                height={detailsHeight}
-                onChange={setEditedEntry}
-                onClose={() => setDetailsOpen(false)}
-                onContinue={
-                  editedEntry ? () => void continueEditedEntry() : undefined
-                }
-                onResizeStart={startDetailsResize}
-              />
-            ) : null}
+            <RequestInfoPanel
+              active={detailsPlacement === "bottom"}
+              editMode={editMode}
+              entry={detailsEntry}
+              height={detailsHeight}
+              open={detailsOpen}
+              onActivate={() => setDetailsPlacement("bottom")}
+              onChange={setEditedEntry}
+              onContinue={
+                editedEntry ? () => void continueEditedEntry() : undefined
+              }
+              onOpenChange={setDetailsOpen}
+              onSizeChange={setDetailsHeight}
+            />
           </div>
         </div>
 
-        {rightDetailsOpen ? (
-          <RequestInfoPanel
-            editMode={editMode}
-            entry={detailsEntry}
-            placement="right"
-            width={rightPanelWidth}
-            onChange={setEditedEntry}
-            onClose={() => setDetailsOpen(false)}
-            onContinue={editedEntry ? () => void continueEditedEntry() : undefined}
-            onResizeStart={(event) => startSidePanelResize(event, "right")}
-          />
-        ) : null}
+        <RequestInfoPanel
+          active={detailsPlacement === "right"}
+          editMode={editMode}
+          entry={detailsEntry}
+          open={detailsOpen}
+          placement="right"
+          width={rightPanelWidth}
+          onActivate={() => setDetailsPlacement("right")}
+          onChange={setEditedEntry}
+          onContinue={
+            editedEntry ? () => void continueEditedEntry() : undefined
+          }
+          onOpenChange={setDetailsOpen}
+          onSizeChange={setRightPanelWidth}
+        />
       </section>
 
-      <ConfirmDialog
-        open={Boolean(deleteProject)}
-        title="Delete session?"
-        description={`This removes ${deleteProject?.name ?? "this session"} and its captured requests from this session.`}
-        onOpenChange={(open) => {
-          if (!open) setDeleteProject(null);
-        }}
-        onConfirm={confirmDeleteProject}
+      <DeleteProjectDialog
+        activeProjectID={activeProjectID}
+        project={deleteProject}
+        requestProjectIDs={requestProjectIDs}
+        setActiveProjectID={setActiveProjectID}
+        setHostFilter={setHostFilter}
+        setPinnedIDs={setPinnedIDs}
+        setProject={setDeleteProject}
+        setProjects={setProjects}
+        setRequestProjectIDs={setRequestProjectIDs}
+        setSelectedID={setSelectedID}
+        setStatus={setStatus}
       />
 
       <ConfirmDialog
@@ -783,60 +637,16 @@ export default function Homeview() {
         onDelete={setDeleteProject}
         onNameChange={setNewProjectName}
         onOpenChange={setSessionsDialogOpen}
-        onRename={openRenameProject}
+        onRename={setRenameProject}
         onSave={saveNoProjectSession}
         onSelect={selectProject}
       />
 
-      <Dialog
-        open={Boolean(renameProject)}
-        onOpenChange={(open) => {
-          if (!open) {
-            setRenameProject(null);
-            setRenameProjectName("");
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-sm">
-          <form
-            className="grid gap-4"
-            onSubmit={(event) => {
-              event.preventDefault();
-              confirmRenameProject();
-            }}
-          >
-            <DialogHeader>
-              <DialogTitle>Rename session</DialogTitle>
-              <DialogDescription>
-                Enter a new name for {renameProject?.name ?? "this session"}.
-              </DialogDescription>
-            </DialogHeader>
-
-            <Input
-              value={renameProjectName}
-              onChange={(event) => setRenameProjectName(event.target.value)}
-              autoFocus
-              aria-label="Session name"
-            />
-
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setRenameProject(null);
-                  setRenameProjectName("");
-                }}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={!renameProjectName.trim()}>
-                Rename
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <RenameProjectDialog
+        project={renameProject}
+        setProject={setRenameProject}
+        setProjects={setProjects}
+      />
     </main>
   );
 }
@@ -861,148 +671,3 @@ type SavedAppState = {
   pinnedIds?: number[];
   requestSessionIds?: Record<string, string>;
 };
-
-function sortedUnique(values: string[]) {
-  return Array.from(new Set(values)).sort((left, right) =>
-    left.localeCompare(right),
-  );
-}
-
-function countProjects(
-  projects: Project[],
-  requestProjectIDs: Record<number, string>,
-  entries: TrafficEntry[],
-) {
-  const counts = new Map<string, number>(
-    projects.map((project) => [project.id, 0]),
-  );
-  for (const entry of entries) {
-    const projectID = projectIDFor(entry.id, requestProjectIDs);
-    counts.set(projectID, (counts.get(projectID) ?? 0) + 1);
-  }
-  return counts;
-}
-
-function buildHostStats(entries: TrafficEntry[]): HostStat[] {
-  const counts = new Map<string, number>();
-  for (const entry of entries) {
-    const host = entry.host || "(unknown)";
-    counts.set(host, (counts.get(host) ?? 0) + 1);
-  }
-  return Array.from(counts, ([host, count]) => ({ host, count })).sort(
-    (left, right) => left.host.localeCompare(right.host),
-  );
-}
-
-function filterAndSortEntries(
-  entries: TrafficEntry[],
-  filter: string,
-  hostFilter: string | null,
-  methodFilters: string[],
-  contentTypeFilters: string[],
-  sort: SortState,
-) {
-  const query = filter.trim().toLowerCase();
-  const filtered = entries.filter((entry) =>
-    isVisibleEntry(entry, query, hostFilter, methodFilters, contentTypeFilters),
-  );
-  return [...filtered].sort((left, right) => compareEntries(left, right, sort));
-}
-
-function isVisibleEntry(
-  entry: TrafficEntry,
-  query: string,
-  hostFilter: string | null,
-  methodFilters: string[],
-  contentTypeFilters: string[],
-) {
-  if (hostFilter && (entry.host || "(unknown)") !== hostFilter) return false;
-  if (methodFilters.length > 0 && !methodFilters.includes(getMethodType(entry)))
-    return false;
-  if (
-    contentTypeFilters.length > 0 &&
-    !getContentTypes(entry).some((type) => contentTypeFilters.includes(type))
-  )
-    return false;
-  return !query || getSearchText(entry).includes(query);
-}
-
-function compareEntries(
-  left: TrafficEntry,
-  right: TrafficEntry,
-  sort: SortState,
-) {
-  const leftValue = getSortValue(left, sort.key);
-  const rightValue = getSortValue(right, sort.key);
-  const modifier = sort.direction === "asc" ? 1 : -1;
-  if (typeof leftValue === "number" && typeof rightValue === "number") {
-    return (leftValue - rightValue) * modifier;
-  }
-  return (
-    String(leftValue ?? "").localeCompare(String(rightValue ?? "")) * modifier
-  );
-}
-
-function parseProxyDetails(proxyURL: string): ProxyDetails {
-  if (!proxyURL) return { host: "-", port: "-", url: "-" };
-  try {
-    const parsed = new URL(
-      proxyURL.includes("://") ? proxyURL : `http://${proxyURL}`,
-    );
-    const port = parsed.port || (parsed.protocol === "https:" ? "443" : "80");
-    return { host: parsed.hostname || "-", port, url: proxyURL };
-  } catch {
-    const [host, port] = proxyURL.replace(/^https?:\/\//, "").split(":");
-    return { host: host || proxyURL, port: port || "-", url: proxyURL };
-  }
-}
-
-function assignDefaultRequests(
-  current: Record<number, string>,
-  entries: TrafficEntry[],
-  projectID: string,
-) {
-  const next = { ...current };
-  for (const entry of entries) {
-    if (projectIDFor(entry.id, next) === defaultProjectID)
-      next[entry.id] = projectID;
-  }
-  return next;
-}
-
-function removeProjectRequests(
-  current: Record<number, string>,
-  projectID: string,
-) {
-  const next = { ...current };
-  for (const [entryID, assignedProjectID] of Object.entries(current)) {
-    if (assignedProjectID === projectID) delete next[Number(entryID)];
-  }
-  return next;
-}
-
-function projectIDFor(
-  entryID: number,
-  requestProjectIDs: Record<number, string>,
-) {
-  return requestProjectIDs[entryID] ?? defaultProjectID;
-}
-
-function normalizeProject(session: Project) {
-  return {
-    id: session.id,
-    name: session.id === defaultProjectID ? defaultProject.name : session.name,
-  };
-}
-
-function numberKeyMap(values: Record<string, string>) {
-  return Object.fromEntries(
-    Object.entries(values).map(([id, sessionID]) => [Number(id), sessionID]),
-  );
-}
-
-function stringKeyMap(values: Record<number, string>) {
-  return Object.fromEntries(
-    Object.entries(values).map(([id, sessionID]) => [String(id), sessionID]),
-  );
-}

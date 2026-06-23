@@ -259,3 +259,144 @@ export const getSearchText = (entry: TrafficEntry) =>
     .filter((value) => value !== undefined && value !== null)
     .join(" ")
     .toLowerCase();
+
+export function sortedUnique(values: string[]) {
+  return Array.from(new Set(values)).sort((left, right) =>
+    left.localeCompare(right),
+  );
+}
+
+export function countProjects(
+  projects: Project[],
+  requestProjectIDs: Record<number, string>,
+  entries: TrafficEntry[],
+) {
+  const counts = new Map<string, number>(
+    projects.map((project) => [project.id, 0]),
+  );
+  for (const entry of entries) {
+    const projectID = projectIDFor(entry.id, requestProjectIDs);
+    counts.set(projectID, (counts.get(projectID) ?? 0) + 1);
+  }
+  return counts;
+}
+
+export function buildHostStats(entries: TrafficEntry[]): HostStat[] {
+  const counts = new Map<string, number>();
+  for (const entry of entries) {
+    const host = entry.host || "(unknown)";
+    counts.set(host, (counts.get(host) ?? 0) + 1);
+  }
+  return Array.from(counts, ([host, count]) => ({ host, count })).sort(
+    (left, right) => left.host.localeCompare(right.host),
+  );
+}
+
+export function filterAndSortEntries(
+  entries: TrafficEntry[],
+  filter: string,
+  hostFilter: string | null,
+  methodFilters: string[],
+  contentTypeFilters: string[],
+  sort: SortState,
+) {
+  const query = filter.trim().toLowerCase();
+  const filtered = entries.filter((entry) =>
+    isVisibleEntry(entry, query, hostFilter, methodFilters, contentTypeFilters),
+  );
+  return [...filtered].sort((left, right) => compareEntries(left, right, sort));
+}
+
+export function parseProxyDetails(proxyURL: string): ProxyDetails {
+  if (!proxyURL) return { host: "-", port: "-", url: "-" };
+  try {
+    const parsed = new URL(
+      proxyURL.includes("://") ? proxyURL : `http://${proxyURL}`,
+    );
+    const port = parsed.port || (parsed.protocol === "https:" ? "443" : "80");
+    return { host: parsed.hostname || "-", port, url: proxyURL };
+  } catch {
+    const [host, port] = proxyURL.replace(/^https?:\/\//, "").split(":");
+    return { host: host || proxyURL, port: port || "-", url: proxyURL };
+  }
+}
+
+export function assignDefaultRequests(
+  current: Record<number, string>,
+  entries: TrafficEntry[],
+  projectID: string,
+) {
+  const next = { ...current };
+  for (const entry of entries) {
+    if (projectIDFor(entry.id, next) === defaultProjectID)
+      next[entry.id] = projectID;
+  }
+  return next;
+}
+
+export function removeProjectRequests(
+  current: Record<number, string>,
+  projectID: string,
+) {
+  const next = { ...current };
+  for (const [entryID, assignedProjectID] of Object.entries(current)) {
+    if (assignedProjectID === projectID) delete next[Number(entryID)];
+  }
+  return next;
+}
+
+export function projectIDFor(
+  entryID: number,
+  requestProjectIDs: Record<number, string>,
+) {
+  return requestProjectIDs[entryID] ?? defaultProjectID;
+}
+
+export function normalizeProject(session: Project) {
+  return {
+    id: session.id,
+    name: session.id === defaultProjectID ? defaultProject.name : session.name,
+  };
+}
+
+export function numberKeyMap(values: Record<string, string>) {
+  return Object.fromEntries(
+    Object.entries(values).map(([id, sessionID]) => [Number(id), sessionID]),
+  );
+}
+
+export function stringKeyMap(values: Record<number, string>) {
+  return Object.fromEntries(
+    Object.entries(values).map(([id, sessionID]) => [String(id), sessionID]),
+  );
+}
+
+function isVisibleEntry(
+  entry: TrafficEntry,
+  query: string,
+  hostFilter: string | null,
+  methodFilters: string[],
+  contentTypeFilters: string[],
+) {
+  if (hostFilter && (entry.host || "(unknown)") !== hostFilter) return false;
+  if (methodFilters.length > 0 && !methodFilters.includes(getMethodType(entry)))
+    return false;
+  if (
+    contentTypeFilters.length > 0 &&
+    !getContentTypes(entry).some((type) => contentTypeFilters.includes(type))
+  )
+    return false;
+  return !query || getSearchText(entry).includes(query);
+}
+
+function compareEntries(left: TrafficEntry, right: TrafficEntry, sort: SortState) {
+  const leftValue = getSortValue(left, sort.key);
+  const rightValue = getSortValue(right, sort.key);
+  const modifier = sort.direction === "asc" ? 1 : -1;
+  if (typeof leftValue === "number" && typeof rightValue === "number") {
+    return (leftValue - rightValue) * modifier;
+  }
+  return (
+    String(leftValue ?? "").localeCompare(String(rightValue ?? "")) * modifier
+  );
+}
