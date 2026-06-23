@@ -1,0 +1,167 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - wails.json
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    name: Check version
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.version.outputs.changed }}
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Read product version
+        id: version
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require("fs");
+          const cp = require("child_process");
+
+          const current = JSON.parse(fs.readFileSync("wails.json", "utf8")).info?.productVersion;
+          if (!current) {
+            throw new Error("wails.json must set info.productVersion");
+          }
+
+          let previous = "";
+          try {
+            const raw = cp.execSync("git show HEAD^:wails.json", { encoding: "utf8" });
+            previous = JSON.parse(raw).info?.productVersion || "";
+          } catch {
+            previous = "";
+          }
+
+          const changed = process.env.GITHUB_EVENT_NAME === "workflow_dispatch" || current !== previous;
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `changed=${changed}\n`);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `version=${current}\n`);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `tag=v${current}\n`);
+          NODE
+
+  build:
+    name: Build ${{ matrix.name }}
+    needs: version
+    if: needs.version.outputs.changed == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+            platform: darwin/universal
+            artifact: Marcus-Proxy-${{ needs.version.outputs.version }}-macOS-universal.zip
+          - name: Windows
+            os: windows-latest
+            platform: windows/amd64
+            artifact: Marcus-Proxy-${{ needs.version.outputs.version }}-windows-amd64-installer.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Wails
+        shell: bash
+        run: |
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+          WAILS_VERSION="$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v2)"
+          go install "github.com/wailsapp/wails/v2/cmd/wails@${WAILS_VERSION}"
+
+      - name: Install NSIS
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install nsis -y
+          "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - name: Build macOS app
+        if: runner.os == 'macOS'
+        shell: bash
+        run: wails build -clean -trimpath -platform "${{ matrix.platform }}"
+
+      - name: Build Windows installer
+        if: runner.os == 'Windows'
+        shell: bash
+        run: wails build -clean -trimpath -platform "${{ matrix.platform }}" -nsis
+
+      - name: Package macOS app
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          mkdir -p dist
+          APP_PATH="$(find build/bin -maxdepth 1 -type d -name '*.app' -print -quit)"
+          if [ -z "$APP_PATH" ]; then
+            echo "No .app bundle found in build/bin" >&2
+            exit 1
+          fi
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "dist/${{ matrix.artifact }}"
+
+      - name: Package Windows installer
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp build/bin/*installer.exe "dist/${{ matrix.artifact }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/${{ matrix.artifact }}
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs:
+      - version
+      - build
+    if: needs.version.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.version.outputs.tag }}
+          VERSION: ${{ needs.version.outputs.version }}
+        shell: bash
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" artifacts/* --clobber
+          else
+            gh release create "$TAG" artifacts/* \
+              --target "$GITHUB_SHA" \
+              --title "Marcus Proxy ${VERSION}" \
+              --notes "Release ${VERSION}"
+          fi

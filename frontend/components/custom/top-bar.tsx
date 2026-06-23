@@ -57,7 +57,7 @@ export function TopBar({
         <div className="w-20 shrink-0" />
 
         <div className="min-w-0 truncate text-sm font-semibold">
-          marcus-proxy · Session: {activeSessionName}
+          Marcus Proxy · Session: {activeSessionName}
         </div>
       </div>
 
