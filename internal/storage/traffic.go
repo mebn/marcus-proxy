@@ -1,134 +1,74 @@
 package storage
 
 import (
-	"encoding/json"
+	"sort"
 
 	captureproxy "marcus-proxy/internal/proxy"
-
-	"gorm.io/gorm/clause"
 )
 
+type trafficRecord struct {
+	SessionID string                    `json:"sessionId"`
+	Entry     captureproxy.TrafficEntry `json:"entry"`
+}
+
 func (s *Store) SaveTrafficEntry(entry captureproxy.TrafficEntry) error {
-	model, err := trafficModelFromProxy(entry, DefaultSessionID)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	records, err := s.loadTrafficRecordsLocked()
 	if err != nil {
 		return err
 	}
-	return db(s).Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "id"}},
-		DoUpdates: clause.AssignmentColumns([]string{
-			"session_id",
-			"time",
-			"method",
-			"url",
-			"host",
-			"status",
-			"bytes",
-			"duration_ms",
-			"client",
-			"error",
-			"is_connect",
-			"request_bytes",
-			"request_headers",
-			"response_headers",
-			"request_body",
-			"response_body",
-			"request_body_truncated",
-			"response_body_truncated",
-			"updated_at",
-		}),
-	}).Create(&model).Error
+
+	for index, record := range records {
+		if record.Entry.ID != entry.ID {
+			continue
+		}
+		if record.SessionID == "" {
+			record.SessionID = DefaultSessionID
+		}
+		record.Entry = entry
+		records[index] = record
+		return s.saveTrafficRecordsLocked(records)
+	}
+
+	records = append(records, trafficRecord{
+		SessionID: DefaultSessionID,
+		Entry:     entry,
+	})
+	return s.saveTrafficRecordsLocked(records)
 }
 
 func (s *Store) LoadTrafficEntries() ([]captureproxy.TrafficEntry, error) {
-	var rows []TrafficEntry
-	if err := db(s).Order("id desc").Find(&rows).Error; err != nil {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	records, err := s.loadTrafficRecordsLocked()
+	if err != nil {
 		return nil, err
 	}
 
-	entries := make([]captureproxy.TrafficEntry, 0, len(rows))
-	for _, row := range rows {
-		entry, err := row.toProxy()
-		if err != nil {
-			return nil, err
-		}
-		entries = append(entries, entry)
+	sort.SliceStable(records, func(i, j int) bool {
+		return records[i].Entry.ID > records[j].Entry.ID
+	})
+
+	entries := make([]captureproxy.TrafficEntry, 0, len(records))
+	for _, record := range records {
+		entries = append(entries, record.Entry)
 	}
 	return entries, nil
 }
 
-func trafficModelFromProxy(entry captureproxy.TrafficEntry, sessionID string) (TrafficEntry, error) {
-	requestHeaders, err := json.Marshal(entry.RequestHeaders)
-	if err != nil {
-		return TrafficEntry{}, err
-	}
-	responseHeaders, err := json.Marshal(entry.ResponseHeaders)
-	if err != nil {
-		return TrafficEntry{}, err
-	}
-	if sessionID == "" {
-		sessionID = DefaultSessionID
-	}
-
-	return TrafficEntry{
-		ID:                    entry.ID,
-		SessionID:             sessionID,
-		Time:                  entry.Time,
-		Method:                entry.Method,
-		URL:                   entry.URL,
-		Host:                  entry.Host,
-		Status:                entry.Status,
-		Bytes:                 entry.Bytes,
-		DurationMs:            entry.DurationMs,
-		Client:                entry.Client,
-		Error:                 entry.Error,
-		IsConnect:             entry.IsConnect,
-		RequestBytes:          entry.RequestBytes,
-		RequestHeaders:        string(requestHeaders),
-		ResponseHeaders:       string(responseHeaders),
-		RequestBody:           entry.RequestBody,
-		ResponseBody:          entry.ResponseBody,
-		RequestBodyTruncated:  entry.RequestBodyTruncated,
-		ResponseBodyTruncated: entry.ResponseBodyTruncated,
-	}, nil
+func (s *Store) loadTrafficRecordsLocked() ([]trafficRecord, error) {
+	return readJSON(s.trafficPath, []trafficRecord{})
 }
 
-func (e TrafficEntry) toProxy() (captureproxy.TrafficEntry, error) {
-	requestHeaders, err := unmarshalHeaders(e.RequestHeaders)
-	if err != nil {
-		return captureproxy.TrafficEntry{}, err
+func (s *Store) saveTrafficRecordsLocked(records []trafficRecord) error {
+	if records == nil {
+		records = []trafficRecord{}
 	}
-	responseHeaders, err := unmarshalHeaders(e.ResponseHeaders)
-	if err != nil {
-		return captureproxy.TrafficEntry{}, err
-	}
-
-	return captureproxy.TrafficEntry{
-		ID:                    e.ID,
-		Time:                  e.Time,
-		Method:                e.Method,
-		URL:                   e.URL,
-		Host:                  e.Host,
-		Status:                e.Status,
-		Bytes:                 e.Bytes,
-		DurationMs:            e.DurationMs,
-		Client:                e.Client,
-		Error:                 e.Error,
-		IsConnect:             e.IsConnect,
-		RequestBytes:          e.RequestBytes,
-		RequestHeaders:        requestHeaders,
-		ResponseHeaders:       responseHeaders,
-		RequestBody:           e.RequestBody,
-		ResponseBody:          e.ResponseBody,
-		RequestBodyTruncated:  e.RequestBodyTruncated,
-		ResponseBodyTruncated: e.ResponseBodyTruncated,
-	}, nil
-}
-
-func unmarshalHeaders(raw string) (map[string][]string, error) {
-	var headers map[string][]string
-	if raw == "" {
-		return headers, nil
-	}
-	err := json.Unmarshal([]byte(raw), &headers)
-	return headers, err
+	sort.SliceStable(records, func(i, j int) bool {
+		return records[i].Entry.ID > records[j].Entry.ID
+	})
+	return writeJSON(s.trafficPath, records)
 }

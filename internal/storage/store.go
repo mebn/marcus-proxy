@@ -1,12 +1,10 @@
 package storage
 
 import (
+	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
-
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 func Open() (*Store, error) {
@@ -19,33 +17,55 @@ func Open() (*Store, error) {
 		return nil, err
 	}
 
-	db, err := gorm.Open(sqlite.Open(filepath.Join(dir, "app.db")), &gorm.Config{})
+	return &Store{
+		statePath:   filepath.Join(dir, "app_state.json"),
+		trafficPath: filepath.Join(dir, "traffic.json"),
+	}, nil
+}
+
+func defaultSession() SessionState {
+	return SessionState{ID: DefaultSessionID, Name: "Quick session"}
+}
+
+func readJSON[T any](path string, fallback T) (T, error) {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return fallback, nil
+	}
 	if err != nil {
-		return nil, err
+		return fallback, err
 	}
-	if err := db.AutoMigrate(&Session{}, &TrafficEntry{}, &PinnedRequest{}, &Setting{}); err != nil {
-		return nil, err
+	if len(data) == 0 {
+		return fallback, nil
 	}
-
-	store := &Store{db: db}
-	return store, store.EnsureDefaultSession()
-}
-
-func (s *Store) EnsureDefaultSession() error {
-	return s.db.Clauses(clause.OnConflict{DoNothing: true}).Create(defaultSession()).Error
-}
-
-func defaultSession() *Session {
-	return &Session{ID: DefaultSessionID, Name: "Quick session"}
-}
-
-func upsertColumns(columns ...string) clause.OnConflict {
-	return clause.OnConflict{
-		Columns:   []clause.Column{{Name: "id"}},
-		DoUpdates: clause.AssignmentColumns(columns),
+	if err := json.Unmarshal(data, &fallback); err != nil {
+		return fallback, err
 	}
+	return fallback, nil
 }
 
-func db(s *Store) *gorm.DB {
-	return s.db
+func writeJSON(path string, value any) error {
+	data, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer func() {
+		_ = os.Remove(tmpPath)
+	}()
+
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, path)
 }
